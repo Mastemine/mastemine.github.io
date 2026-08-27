@@ -655,6 +655,51 @@
   }
   .mcard.active .mbest { color: var(--accent); }
 
+  /* ---------- Level select ---------- */
+  #levels {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #levels.hidden { display: none; }
+
+  .lcard {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 13px 12px;
+    text-align: left;
+    font-family: inherit;
+    color: var(--ink);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .lcard:hover:not(:disabled) { background: var(--surface-hi); }
+  .lcard:disabled { opacity: .4; cursor: default; }
+  .lcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .lcard .lnum {
+    font-size: 9px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .lcard .lname { font-size: 12px; font-weight: 800; line-height: 1.25; }
+  .lcard .lmeta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .lcard .lstars { color: var(--gold); letter-spacing: .1em; }
+
   /* ---------- Settings ---------- */
   #settings {
     position: absolute;
@@ -896,7 +941,7 @@
       <div id="finalStats">
         <div><span class="k">Score</span><span class="v" id="fScore">0</span></div>
         <div><span class="k">Popped</span><span class="v" id="fPopped">0</span></div>
-        <div><span class="k">Time</span><span class="v" id="fTime">0s</span></div>
+        <div><span class="k" id="fTimeLabel">Time</span><span class="v" id="fTime">0s</span></div>
       </div>
       <p id="blurb">
         Circles fall and pile up. Tap one to knock a point off its
@@ -950,6 +995,19 @@
       </button>
     </div>
     <div class="setbody" id="modeList"></div>
+  </div>
+
+  <div id="levels" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Puzzle</div>
+        <h2>Levels</h2>
+      </div>
+      <button class="iconbtn" id="levelsClose" aria-label="Close levels">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="storegrid" id="levelGrid"></div>
   </div>
 
   <div id="settings" class="hidden">
@@ -1060,6 +1118,7 @@
   var elFScore = document.getElementById('fScore');
   var elFPop   = document.getElementById('fPopped');
   var elFTime  = document.getElementById('fTime');
+  var elStatsLabel3 = document.getElementById('fTimeLabel');
   var elNewBest= document.getElementById('newBest');
   var playBtn  = document.getElementById('playBtn');
   var elHint   = document.getElementById('hint');
@@ -1076,6 +1135,9 @@
   var modesEl  = document.getElementById('modes');
   var modesClose=document.getElementById('modesClose');
   var modeList = document.getElementById('modeList');
+  var levelsEl = document.getElementById('levels');
+  var levelsClose=document.getElementById('levelsClose');
+  var levelGrid= document.getElementById('levelGrid');
   var setEl    = document.getElementById('settings');
   var setClose = document.getElementById('setClose');
   var musicSw  = document.getElementById('musicSw');
@@ -1134,11 +1196,27 @@
 
     if (prevW && prevH) {                 // keep the pile sensible on rotate
       var sx = W / prevW, sy = H / prevH;
-      for (var i = 0; i < circles.length; i++) {
-        var c = circles[i];
-        c.x *= sx; c.px *= sx;
-        c.y *= sy; c.py *= sy;
-        c.x = clamp(c.x, c.r, W - c.r);
+      var i, c;
+
+      if (mode && mode.id === 'puzzle') {
+        // An authored board must keep its proportions, so scale positions
+        // and radii by one uniform factor about the centre. Stretching the
+        // axes independently would change which circles touch.
+        var uni = Math.min(sx, sy);
+        for (i = 0; i < circles.length; i++) {
+          c = circles[i];
+          c.x = W / 2 + (c.x - prevW / 2) * uni;
+          c.y = H / 2 + (c.y - prevH / 2) * uni;
+          c.px = c.x; c.py = c.y;
+          c.r *= uni; c.m = c.r * c.r;
+        }
+      } else {
+        for (i = 0; i < circles.length; i++) {
+          c = circles[i];
+          c.x *= sx; c.px *= sx;
+          c.y *= sy; c.py *= sy;
+          c.x = clamp(c.x, c.r, W - c.r);
+        }
       }
     }
     draw();
@@ -1167,12 +1245,20 @@
 
   // Rush ---------------------------------------------------------------
   var RUSH_START  = 20;       // seconds on the clock at the whistle
-  var RUSH_MAX    = 60;       // banking ceiling
-  var RUSH_TOPOUT = 8;        // seconds lost when the pile tops out
+  // The ceiling has to sit well above the top-out penalty, or filling the
+  // board would be unsurvivable by arithmetic and "clear it and carry on"
+  // could never actually happen.
+  var RUSH_MAX    = 120;      // banking ceiling
+  var RUSH_TOPOUT = 60;       // seconds lost when the pile tops out
   // A popped circle pays its own number in seconds: a 5 is worth 5s.
   // Generous by design, so time is made to cost more as the run goes on
   // rather than the reward being shaved -- see RUSH_DRAIN_RAMP.
   var RUSH_DRAIN_RAMP = 100;  // seconds of play per +1x drain rate (0 = off)
+
+  // In a timed mode abilities are unlimited but bought with the clock, and
+  // the pops they cause pay nothing back -- they buy board control, never
+  // time. Endless and Puzzle keep counted charges instead.
+  var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 30 };
 
   // Chain scoring: pop circles that STARTED on the same number back to
   // back and each one is worth a little more. A circle's start value is
@@ -1484,6 +1570,7 @@
       hudLabel: 'Level',
       hudValue: function () { return level(); },
       spawnGap: function () { return Math.max(0.45, 1.45 - elapsed * 0.013); },
+      paysWithTime: false,
       setup: function () {},
       tick: function () {},
       onPop: function () {},
@@ -1508,17 +1595,166 @@
         clock -= dt * rate;
         if (clock <= 0) { clock = 0; endRun('time'); }
       },
-      // A circle pays its own number in seconds, however it died.
-      onPop: function (c) {
+      paysWithTime: true,
+      // Only the circle the player actually tapped pays. Splash kills from a
+      // bomb or a zap clear the board for free but buy no time back.
+      onPop: function (c, gain, tapped) {
+        if (!tapped) return;
         clock = Math.min(RUSH_MAX, clock + c.maxHp);
         floatText(c.x, c.y - c.r - 12, '+' + c.maxHp + 's', activeTheme.gold);
       },
       onContinue: function () { clock = RUSH_START; }
+    },
+
+    puzzle: {
+      id: 'puzzle', name: 'Puzzle', blurb: 'A fixed board and too few taps.',
+      // Zero gravity: an authored board has to hold the shape it was drawn
+      // in. If it slumps into a pile you cannot plan, and what is touching
+      // what stops being readable -- which is the whole mode.
+      gravity: 0, spawns: false, nudge: false, topOut: 'ignore',
+      continues: false, tracksBest: false,
+      hudLabel: 'Taps',
+      hudValue: function () { return taps; },
+      spawnGap: function () { return 1; },
+      paysWithTime: false,
+      setup: function () {
+        var lv = LEVELS[levelIdx];
+        puzzleWon = false;
+        taps = lv.taps;
+        buildLevel(lv);
+        bombs = (lv.grants && lv.grants.bomb) || 0;
+        dtaps = (lv.grants && lv.grants.doubleTap) || 0;
+        lights = (lv.grants && lv.grants.lightning) || 0;
+      },
+      tick: function () {
+        if (puzzleWon) return;
+        if (!circles.length) { puzzleWon = true; endRun('cleared'); }
+        else if (taps <= 0) endRun('taps');
+      },
+      onPop: function () {},
+      onContinue: function () {}
     }
   };
 
   var mode = MODES.endless;
   var clock = 0;
+  var taps = 0, levelIdx = 0, puzzleWon = false;
+
+  // ------------------------------------------------------------- puzzle
+  //
+  // Rows are read as a hexagonal lattice, one character per site:
+  //   .        empty
+  //   1-9      a circle needing that many taps
+  //
+  // Odd rows are offset half a cell and rows sit 0.866 cells apart, so every
+  // neighbouring site is exactly 2r away -- touching, but not overlapping.
+  // That matters: Lightning Touch keys off contact, so if the lattice did
+  // not put circles in genuine contact the ability would do nothing here and
+  // most of these boards would be unsolvable. Circles are all one size in
+  // Puzzle for the same reason -- mixed radii break the contact graph.
+  //
+  // `taps` is deliberately set BELOW the board's total HP, so no amount of
+  // plain tapping can clear it. The gap is the puzzle: it has to be closed
+  // with Lightning Touch splash or a Bomb. `stars` are the taps-remaining
+  // thresholds for three and two stars.
+  //
+  var LEVELS = [
+    // Each level records the line it was designed around, which the test
+    // suite replays to prove the board is actually clearable in budget.
+    { id: 'l1', name: 'First Contact', taps: 5, grants: { lightning: 1 },
+      rows: ['.22', '232', '.22'], stars: [2, 1] },
+
+    { id: 'l2', name: 'Honeycomb', taps: 7, grants: { lightning: 1 },
+      rows: ['.333', '3333', '.333'], stars: [3, 1] },
+
+    { id: 'l3', name: 'Matched Set', taps: 6, grants: { bomb: 1, lightning: 1 },
+      rows: ['4.4.4', '.4.4.', '4.4.4'], stars: [3, 1] },
+
+    { id: 'l4', name: 'Heavy Core', taps: 9, grants: { lightning: 1, doubleTap: 1 },
+      rows: ['.444', '454', '.444'], stars: [3, 1] },
+
+    { id: 'l5', name: 'The Slab', taps: 10, grants: { lightning: 1, doubleTap: 1 },
+      rows: ['4444', '4444', '4444'], stars: [4, 2] },
+
+    { id: 'l6', name: 'Last Word', taps: 12, grants: { bomb: 1, lightning: 1, doubleTap: 1 },
+      rows: ['.5555', '55655', '.5555'], stars: [4, 2] }
+  ];
+
+  function levelById(id) {
+    for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i];
+    return LEVELS[0];
+  }
+
+  function cellSpec(ch) {
+    if (ch >= '1' && ch <= '9') return { hp: ch.charCodeAt(0) - 48 };
+    return null;
+  }
+
+  function levelHp(lv) {
+    var total = 0;
+    for (var r = 0; r < lv.rows.length; r++) {
+      for (var c = 0; c < lv.rows[r].length; c++) {
+        var spec = cellSpec(lv.rows[r][c]);
+        if (spec) total += spec.hp;
+      }
+    }
+    return total;
+  }
+
+  var ROW_H = 0.866;    // hex row spacing, in cells
+
+  // Lay the lattice out centred. Nothing falls and nothing overlaps, so the
+  // board holds exactly the shape it was authored in.
+  function buildLevel(lv) {
+    circles.length = 0;
+
+    var rows = lv.rows.length, cols = 0, r, c;
+    for (r = 0; r < rows; r++) cols = Math.max(cols, lv.rows[r].length);
+
+    // +0.5 of span for the odd-row offset, +1 because sites are centres.
+    var cell = Math.min((W * 0.86) / (cols + 0.5), (H * 0.70) / ((rows - 1) * ROW_H + 1));
+    var rad = cell * 0.5;
+
+    var spanX = (cols - 1) * cell + cell * 0.5;
+    var spanY = (rows - 1) * cell * ROW_H;
+    var originX = (W - spanX) / 2;
+    var originY = (H - spanY) / 2;
+
+    for (r = 0; r < rows; r++) {
+      for (c = 0; c < lv.rows[r].length; c++) {
+        var spec = cellSpec(lv.rows[r][c]);
+        if (!spec) continue;
+        var x = originX + c * cell + (r % 2 ? cell * 0.5 : 0);
+        var y = originY + r * cell * ROW_H;
+        circles.push({
+          x: x, y: y, px: x, py: y,
+          r: rad, m: rad * rad,
+          hp: spec.hp, maxHp: spec.hp,
+          flash: 0, entered: true,
+          wobble: Math.random() * Math.PI * 2
+        });
+      }
+    }
+  }
+
+  var PUZZLE_KEY = 'popPuzzle';
+  var puzzleStars = {};
+  try { puzzleStars = JSON.parse(localStorage.getItem(PUZZLE_KEY) || '{}') || {}; }
+  catch (e) { puzzleStars = {}; }
+
+  function savePuzzle() {
+    try { localStorage.setItem(PUZZLE_KEY, JSON.stringify(puzzleStars)); } catch (e) {}
+  }
+
+  function levelUnlocked(i) {
+    return i === 0 || !!puzzleStars[LEVELS[i - 1].id];
+  }
+
+  function starsFor(lv, tapsLeft) {
+    if (tapsLeft >= lv.stars[0]) return 3;
+    if (tapsLeft >= lv.stars[1]) return 2;
+    return 1;
+  }
 
   // ------------------------------------------------------------ spawning
   function difficulty() { return 1 + elapsed / 26; }
@@ -1687,6 +1923,15 @@
     }
     if (!hit) return;
 
+    // In Puzzle the budget is the resource, so any tap that lands costs
+    // one -- including the tap that aims a bomb. Arming is free.
+    if (mode.id === 'puzzle') {
+      if (taps <= 0) return;
+      taps--;
+      elLevel.textContent = taps;
+      elLevel.classList.toggle('urgent', taps <= 2);
+    }
+
     if (armed === 'bomb') { detonate(hit); return; }
 
     // Snapshot the contacts before anything moves or dies, so the zap hits
@@ -1741,7 +1986,7 @@
       '+' + gain + (showMult ? '  \u00d7' + mult.toFixed(2).replace(/0$/, '') : ''),
       showMult ? activeTheme.gold : hpColor(c.maxHp));
     burst(c.x, c.y, c.r, hpColor(c.maxHp));
-    mode.onPop(c, gain);
+    mode.onPop(c, gain, chained);
     return gain;
   }
 
@@ -2054,7 +2299,7 @@
     flashOver = 1;
     shake = 11;
     spawnTimer = 0.9;
-    toast('Topped out  −' + RUSH_TOPOUT + 's');
+    toast('Board full  −' + RUSH_TOPOUT + 's');
     beep(150, 0.35, 'sawtooth', 0.10);
 
     if (clock <= 0) { clock = 0; endRun('time'); }
@@ -2101,6 +2346,7 @@
       hint: 'Tap a circle to blast its number',
       stock: function () { return bombs; },
       spend: function () { bombs--; },
+      restock: function () { bombs++; },
       live:  function () { return armed === 'bomb'; },
       label: function () { return bombs; }
     },
@@ -2109,6 +2355,7 @@
       hint: 'Every tap counts double for ' + DTAP_SECS + 's',
       stock: function () { return dtaps; },
       spend: function () { dtaps--; },
+      restock: function () { dtaps++; },
       live:  function () { return dtapTime > 0; },
       label: function () { return dtapTime > 0 ? Math.ceil(dtapTime) : dtaps; },
       start: function () { dtapTime = DTAP_SECS; },
@@ -2120,6 +2367,7 @@
       hint: 'Taps also zap whatever is touching, for ' + LIGHT_SECS + 's',
       stock: function () { return lights; },
       spend: function () { lights--; },
+      restock: function () { lights++; },
       live:  function () { return lightTime > 0; },
       label: function () { return lightTime > 0 ? Math.ceil(lightTime) : lights; },
       start: function () { lightTime = LIGHT_SECS; },
@@ -2134,7 +2382,10 @@
 
   function abilityReady(id) {
     var a = ABILITIES[id];
-    return started && !over && !paused && !a.live() && a.stock() > 0;
+    if (!started || over || paused || a.live()) return false;
+    // Priced in seconds, you must be able to afford it and survive it.
+    if (mode.paysWithTime) return clock > ABILITY_SECS[id];
+    return a.stock() > 0;
   }
 
   // Icons are stamped once; per-frame updates only touch text and classes.
@@ -2165,7 +2416,10 @@
   function updateAbilities() {
     for (var id in ABILITIES) {
       var a = ABILITIES[id];
-      a.badge.textContent = a.label();
+      a.badge.textContent = mode.paysWithTime
+        ? (a.live() ? a.label() : ABILITY_SECS[id] + 's')
+        : a.label();
+      a.el.classList.toggle('priced', !!mode.paysWithTime);
       a.el.classList.toggle('armed', a.live());
       a.el.disabled = !a.live() && !abilityReady(id);
 
@@ -2177,31 +2431,53 @@
     }
   }
 
+  // Pay for an ability the way this mode charges: a charge, or seconds.
+  function payFor(id) {
+    if (mode.paysWithTime) {
+      clock = Math.max(0, clock - ABILITY_SECS[id]);
+      floatText(W / 2, 64, '\u2212' + ABILITY_SECS[id] + 's', activeTheme.danger);
+      return ABILITY_SECS[id] + 's';
+    }
+    ABILITIES[id].spend();
+    return null;
+  }
+
+  // Backing out of an armed ability gives back exactly what arming cost, so
+  // changing your mind is always free.
+  function refund(id) {
+    if (mode.paysWithTime) clock = Math.min(RUSH_MAX, clock + ABILITY_SECS[id]);
+    else ABILITIES[id].restock();
+  }
+
   function useAbility(id) {
     var a = ABILITIES[id];
 
     if (a.kind === 'timed') {
-      // Already running? Do nothing rather than burn a charge on a
+      // Already running? Do nothing rather than spend again on a
       // double-click that only resets a clock the player can see.
       if (a.live() || !abilityReady(id)) return;
-      a.spend();
+      var paid = payFor(id);
       a.start();
       updateAbilities();
-      toast(a.hint);
+      toast(paid ? a.hint + '  (\u2212' + paid + ')' : a.hint);
       beep(520, 0.10, 'square', 0.07);
       setTimeout(function () { beep(780, 0.14, 'square', 0.06); }, 90);
       return;
     }
 
-    if (armed === id) { armed = null; updateAbilities(); return; }
+    if (armed === id) { refund(id); armed = null; updateAbilities(); return; }
     if (!abilityReady(id)) return;
+    // A targeted ability is paid for when it is armed, so backing out of a
+    // bomb does not refund -- same as the charge it would otherwise cost.
+    var cost = payFor(id);
     armed = id;
     updateAbilities();
-    toast(a.hint);
+    toast(cost ? a.hint + '  (\u2212' + cost + ')' : a.hint);
   }
 
   function disarm() {
     if (!armed) return;
+    refund(armed);
     armed = null;
     updateAbilities();
   }
@@ -2236,7 +2512,7 @@
     shake = Math.min(14, 5 + victims.length * 1.4);
 
     // A bomb neither builds nor breaks a chain -- it is a separate tool.
-    ABILITIES.bomb.spend();
+    // It was already paid for when it was armed.
     armed = null;
     updateAbilities();
 
@@ -2678,8 +2954,43 @@
   modeList.addEventListener('click', function (e) {
     var card = e.target.closest('.mcard');
     if (!card) return;
+    var id = card.getAttribute('data-mode');
     closeModes();
-    start(card.getAttribute('data-mode'));
+    // Puzzle is a set of levels, not a run -- pick one first.
+    if (id === 'puzzle') { mode = MODES.puzzle; openLevels(); return; }
+    start(id);
+  });
+
+  function renderLevels() {
+    var html = '';
+    for (var i = 0; i < LEVELS.length; i++) {
+      var lv = LEVELS[i];
+      var open = levelUnlocked(i);
+      var got = puzzleStars[lv.id] || 0;
+      html += '<button class="lcard" data-level="' + i + '"' + (open ? '' : ' disabled') + '>' +
+        '<span class="lnum">Level ' + (i + 1) + '</span>' +
+        '<span class="lname">' + (open ? lv.name : 'Locked') + '</span>' +
+        '<span class="lmeta"><span>' + lv.taps + ' taps</span>' +
+        '<span class="lstars">' + (got ? plainStars(got) : '') + '</span></span>' +
+      '</button>';
+    }
+    levelGrid.innerHTML = html;
+  }
+
+  function openLevels() { renderLevels(); levelsEl.classList.remove('hidden'); }
+  function closeLevels() { levelsEl.classList.add('hidden'); }
+
+  levelGrid.addEventListener('click', function (e) {
+    var card = e.target.closest('.lcard');
+    if (!card || card.disabled) return;
+    levelIdx = parseInt(card.getAttribute('data-level'), 10) || 0;
+    closeLevels();
+    start('puzzle');
+  });
+
+  levelsClose.addEventListener('click', function () {
+    closeLevels();
+    if (!started || over) overlay.classList.remove('hidden');
   });
 
   modesBtn.addEventListener('click', openModes);
@@ -2747,7 +3058,8 @@
     return !storeEl.classList.contains('hidden') ||
            !buyPanel.classList.contains('hidden') ||
            !setEl.classList.contains('hidden') ||
-           !modesEl.classList.contains('hidden');
+           !modesEl.classList.contains('hidden') ||
+           !levelsEl.classList.contains('hidden');
   }
 
   // ------------------------------------------------------- rewarded ads
@@ -2949,6 +3261,8 @@
     }
     beep(180, 0.5, 'sawtooth', 0.09);
 
+    if (mode.id === 'puzzle') { endPuzzle(reason); return; }
+
     var isBest = mode.tracksBest && score > best;
     if (isBest) {
       best = score;
@@ -2970,6 +3284,7 @@
     elFScore.textContent = score;
     elFPop.textContent = popped;
     elFTime.textContent = Math.floor(elapsed) + 's';
+    elStatsLabel3.textContent = 'Time';
     elStats.classList.add('show');
     elNewBest.classList.toggle('show', isBest);
 
@@ -2988,6 +3303,58 @@
     }
 
     overlay.classList.remove('hidden');
+  }
+
+  // A puzzle does not have a high score, it has a verdict: cleared with taps
+  // to spare, or not cleared. The continue offer is meaningless here -- a
+  // board wipe is the thing you were being asked to earn -- so it is Retry.
+  function endPuzzle(reason) {
+    var lv = LEVELS[levelIdx];
+    var won = reason === 'cleared';
+    var stars = won ? starsFor(lv, taps) : 0;
+
+    if (won) {
+      var prev = puzzleStars[lv.id] || 0;
+      if (stars > prev) { puzzleStars[lv.id] = stars; savePuzzle(); }
+      beep(660, 0.14, 'sine', 0.10);
+      setTimeout(function () { beep(880, 0.16, 'sine', 0.09); }, 110);
+      setTimeout(function () { beep(1170, 0.24, 'sine', 0.08); }, 230);
+    }
+
+    elTitle.innerHTML = won ? 'Cleared' : 'Out of Taps';
+    elBlurb.innerHTML = won
+      ? lv.name + ' &mdash; ' + starRow(stars) + '<br>' +
+        (taps === 0 ? 'Not a tap to spare.' : taps + ' tap' + (taps === 1 ? '' : 's') + ' left over.')
+      : lv.name + '<br>' + circles.length + ' circle' +
+        (circles.length === 1 ? '' : 's') + ' still standing. Spend the abilities.';
+
+    elFScore.textContent = score;
+    elFPop.textContent = popped;
+    elFTime.textContent = won ? stars + '/3' : '—';
+    elStatsLabel3.textContent = won ? 'Stars' : 'Result';
+    elStats.classList.add('show');
+    elNewBest.classList.remove('show');
+    contBox.classList.remove('show');
+
+    var hasNext = won && levelIdx < LEVELS.length - 1;
+    playBtn.textContent = hasNext ? 'Next Level' : (won ? 'Level Select' : 'Retry');
+    playBtn.classList.remove('btn-ghost');
+    playBtn.dataset.puzzleAction = hasNext ? 'next' : (won ? 'select' : 'retry');
+    elHint.innerHTML = 'R = retry &nbsp;&middot;&nbsp; Esc = level select';
+
+    overlay.classList.remove('hidden');
+  }
+
+  function plainStars(n) {
+    var out = '';
+    for (var i = 0; i < 3; i++) out += i < n ? '\u2605' : '\u2606';
+    return out;
+  }
+
+  function starRow(n) {
+    var out = '';
+    for (var i = 0; i < 3; i++) out += i < n ? '\u2605' : '\u2606';
+    return '<b style="letter-spacing:.15em">' + out + '</b>';
   }
 
   function togglePause() {
@@ -3015,6 +3382,15 @@
     if (adBusy) return;
     if (paused && !over) { togglePause(); return; }
     playBtn.classList.remove('btn-ghost');
+
+    // On a puzzle result the button is Next Level / Level Select / Retry.
+    if (mode.id === 'puzzle' && over) {
+      var act = playBtn.dataset.puzzleAction;
+      if (act === 'next') { levelIdx = Math.min(LEVELS.length - 1, levelIdx + 1); start('puzzle'); return; }
+      if (act === 'select') { overlay.classList.add('hidden'); openLevels(); return; }
+      start('puzzle');
+      return;
+    }
     start();
   });
   contBtn.addEventListener('click', function () { requestContinue(); });
@@ -3026,6 +3402,8 @@
       if (!buyPanel.classList.contains('hidden')) closeCheckout();
       else if (!setEl.classList.contains('hidden')) closeSettings();
       else if (!modesEl.classList.contains('hidden')) closeModes();
+      else if (!levelsEl.classList.contains('hidden')) closeLevels();
+      else if (mode.id === 'puzzle') openLevels();
       else if (!storeEl.classList.contains('hidden')) closeStore();
       return;
     }
@@ -3068,6 +3446,14 @@
       clock: function () { return clock; },
       setClock: function (v) { clock = v; },
       openModes: openModes,
+      openLevels: openLevels,
+      levels: LEVELS,
+      levelHp: levelHp,
+      taps: function () { return taps; },
+      setLevel: function (i) { levelIdx = i; },
+      levelIdx: function () { return levelIdx; },
+      stars: function () { return puzzleStars; },
+      resetPuzzle: function () { puzzleStars = {}; savePuzzle(); },
       bestFor: loadBest,
       nodes: function () {
         return { ctx: audioCtx, master: masterGain, music: musicBus, sfx: sfxBus };
