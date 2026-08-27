@@ -211,22 +211,37 @@
     top: 0;
     left: 0;
     right: 0;
+    z-index: 2;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+  }
+  .bufflane {
+    display: none;
     height: 3px;
     background: var(--line);
-    opacity: 0;
-    transition: opacity .2s;
-    pointer-events: none;
-    z-index: 2;
   }
-  #buffBar.on { opacity: 1; }
-  #buffBar i {
+  .bufflane.on { display: block; }
+  .bufflane i {
     display: block;
     height: 100%;
     width: 100%;
-    background: var(--gold);
   }
-  @media (prefers-reduced-motion: reduce) {
-    #buffBar { transition: none; }
+
+  /* Five controls plus the stats is a tight fit on a small phone. */
+  @media (max-width: 440px) {
+    #hud { gap: 6px; padding: 0 9px; }
+    .iconbtn { width: 32px; height: 32px; border-radius: 9px; }
+    .iconbtn svg { width: 14px; height: 14px; }
+    .abtn .charges {
+      top: -4px;
+      right: -4px;
+      min-width: 14px;
+      height: 14px;
+      line-height: 14px;
+      font-size: 8px;
+      padding: 0 3px;
+    }
   }
 
   #overlay {
@@ -822,6 +837,7 @@
     <div class="spacer"></div>
     <span id="combo"></span>
     <div class="stat" style="text-align:right"><span class="label">Level</span><span class="value" id="level">1</span></div>
+    <button class="iconbtn abtn" id="lightBtn" title="Lightning Touch (L)" aria-label="Lightning touch"></button>
     <button class="iconbtn abtn" id="dtapBtn" title="Double Tap (D)" aria-label="Double tap"></button>
     <button class="iconbtn abtn" id="bombBtn" title="Bomb (B)" aria-label="Arm bomb"></button>
     <button class="iconbtn" id="soundBtn" title="Sound" aria-label="Toggle sound"></button>
@@ -830,7 +846,7 @@
 
   <div id="wrap">
     <canvas id="game"></canvas>
-    <div id="buffBar"><i id="buffFill"></i></div>
+    <div id="buffBar"></div>
   </div>
 
   <div id="overlay">
@@ -1029,7 +1045,7 @@
   var bombBtn  = document.getElementById('bombBtn');
   var dtapBtn  = document.getElementById('dtapBtn');
   var buffBar  = document.getElementById('buffBar');
-  var buffFill = document.getElementById('buffFill');
+  var lightBtn = document.getElementById('lightBtn');
   var pauseBtn = document.getElementById('pauseBtn');
   var soundBtn = document.getElementById('soundBtn');
 
@@ -1037,6 +1053,7 @@
     pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1.2"/><rect x="9" y="2" width="4" height="12" rx="1.2"/></svg>',
     play:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11a1 1 0 0 0 1.53.85l8.5-5.5a1 1 0 0 0 0-1.7l-8.5-5.5A1 1 0 0 0 4 2.5z"/></svg>',
     sndOn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="M10.4 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.4a6.6 6.6 0 0 1 0 9.2"/></svg>',
+    bolt:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.4 1.2 3.6 8.7a.55.55 0 0 0 .43.9h2.9l-.9 4.9a.4.4 0 0 0 .72.3l5.8-7.5a.55.55 0 0 0-.43-.9h-2.9l.9-4.9a.4.4 0 0 0-.72-.3z"/></svg>',
     dtap:  '<svg viewBox="0 0 16 16"><text x="8" y="11.6" text-anchor="middle" ' +
            'font-size="10.5" font-weight="800" fill="currentColor" ' +
            'font-family="Montserrat, system-ui, sans-serif">\u00d72</text></svg>',
@@ -1094,6 +1111,11 @@
 
   // Abilities are armed, then spent on the next circle you tap.
   var BOMB_CHARGES = 3;       // per run
+  var LIGHT_CHARGES = 2;      // per run
+  var LIGHT_SECS = 30;        // how long lightning touch lasts
+  var LIGHT_DAMAGE = 1;       // dealt to each circle touching the one tapped
+  var TOUCH_SLOP = 3;         // px of tolerance for "touching"
+
   var DTAP_CHARGES = 2;       // per run
   var DTAP_SECS = 30;         // how long double tap lasts
   var DTAP_DAMAGE = 2;        // points knocked off per tap while it runs
@@ -1116,6 +1138,8 @@
   var chainVal = 0, chainLen = 0;   // start-number of the live chain, and its length
   var bombs = 0, armed = null;      // armed ability id, spent on the next tap
   var dtaps = 0, dtapTime = 0;      // double tap charges, and seconds left on it
+  var lights = 0, lightTime = 0;    // lightning touch charges, and seconds left
+  var arcs = [];                    // live lightning bolts, purely decorative
   var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
   var shake = 0, flashOver = 0, chainPulse = 0;
   var running = false, over = false, paused = false, started = false;
@@ -1492,6 +1516,10 @@
       f.life -= 0.022;
       if (f.life <= 0) floaters.splice(i, 1);
     }
+    for (i = arcs.length - 1; i >= 0; i--) {
+      arcs[i].life -= 0.055;
+      if (arcs[i].life <= 0) arcs.splice(i, 1);
+    }
     chainPulse += 0.075;
     if (shake > 0) shake = Math.max(0, shake - 0.7);
     if (flashOver > 0) flashOver = Math.max(0, flashOver - 0.02);
@@ -1515,6 +1543,10 @@
 
     if (armed === 'bomb') { detonate(hit); return; }
 
+    // Snapshot the contacts before anything moves or dies, so the zap hits
+    // what was actually touching at the moment of the tap.
+    var contacts = lightTime > 0 ? touching(hit) : null;
+
     hit.hp -= (dtapTime > 0 ? DTAP_DAMAGE : 1);
     hit.flash = 1;
 
@@ -1524,34 +1556,98 @@
     if (hit.hp > 0) {
       burst(hit.x + (px - hit.x) * 0.4, hit.y + (py - hit.y) * 0.4, hit.r * 0.6, hpColor(hit.hp), 6);
       beep(220 + (hit.maxHp - hit.hp) * 45, 0.06, 'triangle', 0.05);
-      return;
+    } else {
+      var idx = circles.indexOf(hit);
+      if (idx >= 0) circles.splice(idx, 1);
+      awardPop(hit, true);
+      shake = Math.min(9, 2 + hit.r * 0.09);
+      beep(520 + hit.maxHp * 30 + Math.min(chainLen, 8) * 26, 0.13, 'sine', 0.10);
     }
 
-    // Popped.
-    var idx = circles.indexOf(hit);
-    if (idx >= 0) circles.splice(idx, 1);
+    if (contacts) zap(hit, contacts);
+  }
+
+  // Score a popped circle. `chained` is true only for the circle the player
+  // actually tapped: splash kills from a bomb or a zap pay the base rate and
+  // leave the chain alone, so an area effect can't inflate a chain the
+  // player never really built.
+  function awardPop(c, chained) {
     popped++;
+    var mult = 1;
 
-    // Same start number as the last circle popped? The chain grows.
-    // Anything else starts a fresh chain on that number.
-    if (hit.maxHp === chainVal) chainLen++;
-    else { chainVal = hit.maxHp; chainLen = 1; }
-    updateChain();
+    if (chained) {
+      if (c.maxHp === chainVal) chainLen++;
+      else { chainVal = c.maxHp; chainLen = 1; }
+      updateChain();
+      mult = Math.min(CHAIN_CAP, 1 + CHAIN_STEP * (chainLen - 1));
+    }
 
-    var mult = Math.min(CHAIN_CAP, 1 + CHAIN_STEP * (chainLen - 1));
-    var gain = Math.round(hit.maxHp * 10 * mult * (1 + hit.r / 120));
+    var gain = Math.round(c.maxHp * 10 * mult * (1 + c.r / 120));
     score += gain;
     elScore.textContent = score;
     elScore.classList.remove('bump');
     void elScore.offsetWidth;
     elScore.classList.add('bump');
 
-    floatText(hit.x, hit.y,
-      '+' + gain + (chainLen >= 2 ? '  \u00d7' + mult.toFixed(2).replace(/0$/, '') : ''),
-      chainLen >= 2 ? activeTheme.gold : hpColor(hit.maxHp));
-    burst(hit.x, hit.y, hit.r, hpColor(hit.maxHp));
-    shake = Math.min(9, 2 + hit.r * 0.09);
-    beep(520 + hit.maxHp * 30 + Math.min(chainLen, 8) * 26, 0.13, 'sine', 0.10);
+    var showMult = chained && chainLen >= 2;
+    floatText(c.x, c.y,
+      '+' + gain + (showMult ? '  \u00d7' + mult.toFixed(2).replace(/0$/, '') : ''),
+      showMult ? activeTheme.gold : hpColor(c.maxHp));
+    burst(c.x, c.y, c.r, hpColor(c.maxHp));
+    return gain;
+  }
+
+  // Circles the solver is holding against this one. A settled pile resolves
+  // to exactly r1+r2 apart, so a couple of pixels of slop catches genuine
+  // contacts without reaching across a gap.
+  function touching(src) {
+    var out = [];
+    for (var i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      if (c === src) continue;
+      var dx = c.x - src.x, dy = c.y - src.y;
+      var reach = c.r + src.r + TOUCH_SLOP;
+      if (dx * dx + dy * dy <= reach * reach) out.push(c);
+    }
+    return out;
+  }
+
+  function bolt(x1, y1, x2, y2) {
+    var pts = [], n = 5;
+    var dx = x2 - x1, dy = y2 - y1;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var nx = -dy / len, ny = dx / len;
+    for (var i = 0; i <= n; i++) {
+      var t = i / n;
+      var off = (i === 0 || i === n) ? 0 : rand(-1, 1) * len * 0.16;
+      pts.push([x1 + dx * t + nx * off, y1 + dy * t + ny * off]);
+    }
+    return pts;
+  }
+
+  function zap(src, contacts) {
+    var struck = 0;
+    for (var i = 0; i < contacts.length; i++) {
+      var c = contacts[i];
+      var idx = circles.indexOf(c);
+      if (idx < 0) continue;            // already gone (it was the tapped one)
+
+      struck++;
+      arcs.push({ pts: bolt(src.x, src.y, c.x, c.y), life: 1 });
+      c.hp -= LIGHT_DAMAGE;
+      c.flash = Math.max(c.flash, 0.85);
+
+      if (c.hp > 0) {
+        burst(c.x, c.y, c.r * 0.55, activeTheme.accent, 5);
+      } else {
+        circles.splice(idx, 1);
+        awardPop(c, false);
+      }
+    }
+    if (struck) {
+      shake = Math.max(shake, Math.min(8, 1.5 + struck * 1.1));
+      beep(1150 + struck * 60, 0.09, 'square', 0.05);
+    }
   }
 
   function updateChain() {
@@ -1669,6 +1765,30 @@
       ctx.fillText(c.hp, c.x, c.y);
     }
 
+    // Lightning, over the balls it just struck.
+    if (arcs.length) {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (i = 0; i < arcs.length; i++) {
+        var arc = arcs[i], pts = arc.pts;
+        ctx.globalAlpha = Math.max(0, arc.life);
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (var q = 1; q < pts.length; q++) ctx.lineTo(pts[q][0], pts[q][1]);
+        ctx.strokeStyle = rgba(activeTheme.accent, 0.35);
+        ctx.lineWidth = 7;
+        ctx.stroke();
+        ctx.strokeStyle = activeTheme.accent;
+        ctx.lineWidth = 3.6;
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.lineCap = 'butt';
+    }
+
     // Particles.
     for (i = 0; i < particles.length; i++) {
       var p = particles[i];
@@ -1728,14 +1848,18 @@
 
     // The buff clock only advances during live play: update() is not called
     // while paused, on the game-over screen, or behind the store.
+    var ticked = false;
     if (dtapTime > 0) {
       dtapTime = Math.max(0, dtapTime - dt);
-      updateAbilities();
-      if (dtapTime === 0) {
-        toast('Double tap over');
-        beep(240, 0.20, 'triangle', 0.06);
-      }
+      ticked = true;
+      if (dtapTime === 0) { toast(ABILITIES.doubleTap.done); beep(240, 0.20, 'triangle', 0.06); }
     }
+    if (lightTime > 0) {
+      lightTime = Math.max(0, lightTime - dt);
+      ticked = true;
+      if (lightTime === 0) { toast(ABILITIES.lightning.done); beep(240, 0.20, 'triangle', 0.06); }
+    }
+    if (ticked) updateAbilities();
 
     elLevel.textContent = level();
 
@@ -1811,12 +1935,26 @@
       spend: function () { dtaps--; },
       live:  function () { return dtapTime > 0; },
       label: function () { return dtapTime > 0 ? Math.ceil(dtapTime) : dtaps; },
-      start: function () { dtapTime = DTAP_SECS; }
+      start: function () { dtapTime = DTAP_SECS; },
+      secs: DTAP_SECS, time: function () { return dtapTime; }, bar: 'var(--gold)',
+      done: 'Double tap over'
+    },
+    lightning: {
+      name: 'Lightning Touch', kind: 'timed', icon: 'bolt', el: null, badge: null,
+      hint: 'Taps also zap whatever is touching, for ' + LIGHT_SECS + 's',
+      stock: function () { return lights; },
+      spend: function () { lights--; },
+      live:  function () { return lightTime > 0; },
+      label: function () { return lightTime > 0 ? Math.ceil(lightTime) : lights; },
+      start: function () { lightTime = LIGHT_SECS; },
+      secs: LIGHT_SECS, time: function () { return lightTime; }, bar: 'var(--accent)',
+      done: 'Lightning touch over'
     }
   };
 
   ABILITIES.bomb.el = bombBtn;
   ABILITIES.doubleTap.el = dtapBtn;
+  ABILITIES.lightning.el = lightBtn;
 
   function abilityReady(id) {
     var a = ABILITIES[id];
@@ -1829,6 +1967,16 @@
       var a = ABILITIES[id];
       a.el.innerHTML = ICON[a.icon] + '<span class="charges"></span>';
       a.badge = a.el.querySelector('.charges');
+
+      // Every timed ability gets its own clock lane, so two can run at once.
+      if (a.kind === 'timed') {
+        a.lane = document.createElement('div');
+        a.lane.className = 'bufflane';
+        a.fill = document.createElement('i');
+        a.fill.style.background = a.bar;
+        a.lane.appendChild(a.fill);
+        buffBar.appendChild(a.lane);
+      }
       (function (key) {
         a.el.addEventListener('click', function () {
           useAbility(key);
@@ -1844,9 +1992,13 @@
       a.badge.textContent = a.label();
       a.el.classList.toggle('armed', a.live());
       a.el.disabled = !a.live() && !abilityReady(id);
+
+      if (a.kind === 'timed' && a.lane) {
+        var on = a.live();
+        a.lane.classList.toggle('on', on);
+        if (on) a.fill.style.width = (a.time() / a.secs * 100).toFixed(1) + '%';
+      }
     }
-    buffBar.classList.toggle('on', dtapTime > 0);
-    if (dtapTime > 0) buffFill.style.width = (dtapTime / DTAP_SECS * 100).toFixed(1) + '%';
   }
 
   function useAbility(id) {
@@ -2535,10 +2687,13 @@
     circles.length = 0;
     particles.length = 0;
     floaters.length = 0;
+    arcs.length = 0;
     score = 0; popped = 0; elapsed = 0;
     chainVal = 0; chainLen = 0;
     bombs = BOMB_CHARGES; armed = null;
     dtaps = DTAP_CHARGES; dtapTime = 0;
+    lights = LIGHT_CHARGES; lightTime = 0;
+    arcs.length = 0;
     spawnTimer = 0; dangerTimer = 0; dangerGlow = 0;
     shake = 0; flashOver = 0;
     accumulator = 0;
@@ -2668,6 +2823,8 @@
       useAbility('bomb');
     } else if (e.key === 'd' || e.key === 'D') {
       useAbility('doubleTap');
+    } else if (e.key === 'l' || e.key === 'L') {
+      useAbility('lightning');
     }
   });
 
@@ -2692,6 +2849,9 @@
       armed: function () { return armed; },
       dtaps: function () { return dtaps; },
       dtapTime: function () { return dtapTime; },
+      lights: function () { return lights; },
+      lightTime: function () { return lightTime; },
+      touching: touching,
       themes: THEMES,
       openStore: openStore,
       selectTheme: selectTheme,
