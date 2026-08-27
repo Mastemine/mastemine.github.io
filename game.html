@@ -136,6 +136,8 @@
     font-variant-numeric: tabular-nums;
   }
   #score.bump { animation: bump .18s ease-out; }
+  /* Rush clock in its last five seconds. */
+  .value.urgent { color: var(--danger, #f87171); }
   @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
 
   .spacer { flex: 1 1 auto; }
@@ -615,6 +617,44 @@
     text-align: right;
   }
 
+  /* ---------- Modes ---------- */
+  #modes {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #modes.hidden { display: none; }
+
+  .mcard {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 15px 16px;
+    font-family: inherit;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .mcard:hover { background: var(--surface-hi); }
+  .mcard.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mcard .mname { font-size: 15px; font-weight: 800; margin-bottom: 5px; }
+  .mcard .mblurb { font-size: 11px; line-height: 1.6; color: var(--muted); }
+  .mcard .mbest {
+    margin-top: 9px;
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .mcard.active .mbest { color: var(--accent); }
+
   /* ---------- Settings ---------- */
   #settings {
     position: absolute;
@@ -836,7 +876,7 @@
     <div class="stat" id="bestStat"><span class="label">Best</span><span class="value" id="best">0</span></div>
     <div class="spacer"></div>
     <span id="combo"></span>
-    <div class="stat" style="text-align:right"><span class="label">Level</span><span class="value" id="level">1</span></div>
+    <div class="stat" style="text-align:right"><span class="label" id="levelLabel">Level</span><span class="value" id="level">1</span></div>
     <button class="iconbtn abtn" id="lightBtn" title="Lightning Touch (L)" aria-label="Lightning touch"></button>
     <button class="iconbtn abtn" id="dtapBtn" title="Double Tap (D)" aria-label="Double tap"></button>
     <button class="iconbtn abtn" id="bombBtn" title="Bomb (B)" aria-label="Arm bomb"></button>
@@ -874,6 +914,7 @@
       </div>
       <button class="btn" id="playBtn">Play</button>
       <div class="menurow">
+        <button class="btn btn-ghost" id="modesBtn">Modes</button>
         <button class="btn btn-ghost" id="themesBtn">Themes</button>
         <button class="btn btn-ghost" id="settingsBtn">Settings</button>
       </div>
@@ -896,6 +937,19 @@
       <button class="linkbtn" id="restoreBtn">Restore purchases</button>
       <span id="storeNote"></span>
     </div>
+  </div>
+
+  <div id="modes" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Play</div>
+        <h2>Modes</h2>
+      </div>
+      <button class="iconbtn" id="modesClose" aria-label="Close modes">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="setbody" id="modeList"></div>
   </div>
 
   <div id="settings" class="hidden">
@@ -998,6 +1052,7 @@
   var elScore  = document.getElementById('score');
   var elBest   = document.getElementById('best');
   var elLevel  = document.getElementById('level');
+  var elLevelLabel = document.getElementById('levelLabel');
   var elCombo  = document.getElementById('combo');
   var elTitle  = document.getElementById('title');
   var elBlurb  = document.getElementById('blurb');
@@ -1017,6 +1072,10 @@
   var adCancel = document.getElementById('adCancel');
   var themesBtn= document.getElementById('themesBtn');
   var settingsBtn=document.getElementById('settingsBtn');
+  var modesBtn = document.getElementById('modesBtn');
+  var modesEl  = document.getElementById('modes');
+  var modesClose=document.getElementById('modesClose');
+  var modeList = document.getElementById('modeList');
   var setEl    = document.getElementById('settings');
   var setClose = document.getElementById('setClose');
   var musicSw  = document.getElementById('musicSw');
@@ -1102,6 +1161,19 @@
   var DANGER_ZONE = 110;      // px from the top where the warning glows
   var MAX_CIRCLES = 90;
 
+  // Gravity is per-mode: Puzzle turns it off so an authored board holds the
+  // shape it was drawn in instead of slumping into a pile.
+  var gravity = GRAVITY;
+
+  // Rush ---------------------------------------------------------------
+  var RUSH_START  = 20;       // seconds on the clock at the whistle
+  var RUSH_MAX    = 60;       // banking ceiling
+  var RUSH_TOPOUT = 8;        // seconds lost when the pile tops out
+  // A popped circle pays its own number in seconds: a 5 is worth 5s.
+  // Generous by design, so time is made to cost more as the run goes on
+  // rather than the reward being shaved -- see RUSH_DRAIN_RAMP.
+  var RUSH_DRAIN_RAMP = 100;  // seconds of play per +1x drain rate (0 = off)
+
   // Chain scoring: pop circles that STARTED on the same number back to
   // back and each one is worth a little more. A circle's start value is
   // what counts, not what it currently shows, so a half-tapped 6 still
@@ -1146,7 +1218,30 @@
   var continuesUsed = 0, adBusy = false;
   var lastTime = 0, accumulator = 0;
 
-  try { best = parseInt(localStorage.getItem('popBest') || '0', 10) || 0; } catch (e) { best = 0; }
+  // Bests are per mode. The original single-mode key is migrated to the
+  // Endless slot on first load so nobody's existing record disappears.
+  var MODE_KEY = 'popMode';
+  function bestKey(id) { return 'popBest:' + id; }
+
+  function loadBest(id) {
+    try {
+      var v = localStorage.getItem(bestKey(id));
+      if (v === null && id === 'endless') {
+        var legacy = localStorage.getItem('popBest');
+        if (legacy !== null) {
+          localStorage.setItem(bestKey('endless'), legacy);
+          v = legacy;
+        }
+      }
+      return parseInt(v || '0', 10) || 0;
+    } catch (e) { return 0; }
+  }
+
+  function saveBest(id, v) {
+    try { localStorage.setItem(bestKey(id), String(v)); } catch (e) {}
+  }
+
+  best = loadBest('endless');
   elBest.textContent = best;
 
   // ---------------------------------------------------------------- audio
@@ -1374,6 +1469,57 @@
     soundBtn.blur();
   });
 
+  // ----------------------------------------------------------------- modes
+  //
+  // Until now the rules of the game were literals scattered through start(),
+  // update() and spawnCircle(). A mode is those rules written down: what
+  // spawns, what gravity does, what ends the run, what the right-hand HUD
+  // readout means. Endless is exactly the game as it has always played.
+  //
+  var MODES = {
+    endless: {
+      id: 'endless', name: 'Endless', blurb: 'Survive as long as you can.',
+      gravity: GRAVITY, spawns: true, nudge: true, topOut: 'end',
+      continues: true, tracksBest: true,
+      hudLabel: 'Level',
+      hudValue: function () { return level(); },
+      spawnGap: function () { return Math.max(0.45, 1.45 - elapsed * 0.013); },
+      setup: function () {},
+      tick: function () {},
+      onPop: function () {},
+      onContinue: function () {}
+    },
+
+    rush: {
+      id: 'rush', name: 'Rush', blurb: 'Pops buy time. Stopping kills you.',
+      gravity: GRAVITY, spawns: true, nudge: true, topOut: 'time',
+      continues: true, tracksBest: true,
+      hudLabel: 'Time',
+      hudValue: function () { return clock.toFixed(1); },
+      // Pressure comes from a shorter fuse and a faster ramp, not from
+      // clipping the reward.
+      spawnGap: function () { return Math.max(0.32, 1.10 - elapsed * 0.020); },
+      setup: function () { clock = RUSH_START; },
+      tick: function (dt) {
+        // Time gets more expensive the longer you last. Without this a
+        // competent player banks faster than the clock can drain and the
+        // mode never ends.
+        var rate = RUSH_DRAIN_RAMP ? 1 + elapsed / RUSH_DRAIN_RAMP : 1;
+        clock -= dt * rate;
+        if (clock <= 0) { clock = 0; endRun('time'); }
+      },
+      // A circle pays its own number in seconds, however it died.
+      onPop: function (c) {
+        clock = Math.min(RUSH_MAX, clock + c.maxHp);
+        floatText(c.x, c.y - c.r - 12, '+' + c.maxHp + 's', activeTheme.gold);
+      },
+      onContinue: function () { clock = RUSH_START; }
+    }
+  };
+
+  var mode = MODES.endless;
+  var clock = 0;
+
   // ------------------------------------------------------------ spawning
   function difficulty() { return 1 + elapsed / 26; }
   function level() { return 1 + Math.floor(elapsed / 20); }
@@ -1434,7 +1580,7 @@
       if (vy > MAX_FALL) vy = MAX_FALL;
       c.px = c.x; c.py = c.y;
       c.x += vx;
-      c.y += vy + GRAVITY;
+      c.y += vy + gravity;
       if (!c.entered && c.y - c.r > 2) c.entered = true;
       if (c.flash > 0) c.flash = Math.max(0, c.flash - 0.09);
     }
@@ -1550,8 +1696,9 @@
     hit.hp -= (dtapTime > 0 ? DTAP_DAMAGE : 1);
     hit.flash = 1;
 
-    // A tap nudges the circle upward a touch -- feels responsive.
-    hit.py = hit.y + 0.9;
+    // A tap nudges the circle upward a touch -- feels responsive. Puzzle
+    // suppresses it so an authored board never drifts out of shape.
+    if (mode.nudge) hit.py = hit.y + 0.9;
 
     if (hit.hp > 0) {
       burst(hit.x + (px - hit.x) * 0.4, hit.y + (py - hit.y) * 0.4, hit.r * 0.6, hpColor(hit.hp), 6);
@@ -1594,6 +1741,7 @@
       '+' + gain + (showMult ? '  \u00d7' + mult.toFixed(2).replace(/0$/, '') : ''),
       showMult ? activeTheme.gold : hpColor(c.maxHp));
     burst(c.x, c.y, c.r, hpColor(c.maxHp));
+    mode.onPop(c, gain);
     return gain;
   }
 
@@ -1839,12 +1987,17 @@
   function update(dt) {
     elapsed += dt;
 
-    // Spawn rate ramps up; it never gets faster than a circle every 0.5s.
-    spawnTimer -= dt;
-    if (spawnTimer <= 0) {
-      spawnCircle();
-      spawnTimer = Math.max(0.45, 1.45 - elapsed * 0.013);
+    // Spawn cadence belongs to the mode; Puzzle does not spawn at all.
+    if (mode.spawns) {
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) {
+        spawnCircle();
+        spawnTimer = mode.spawnGap();
+      }
     }
+
+    mode.tick(dt);
+    if (over) return;          // the mode may have ended the run
 
     // The buff clock only advances during live play: update() is not called
     // while paused, on the game-over screen, or behind the store.
@@ -1861,7 +2014,8 @@
     }
     if (ticked) updateAbilities();
 
-    elLevel.textContent = level();
+    elLevel.textContent = mode.hudValue();
+    if (mode.id === 'rush') elLevel.classList.toggle('urgent', clock <= 5);
 
     // How close is the pile to the top?
     var topmost = Infinity;
@@ -1876,12 +2030,34 @@
     var target = topmost === Infinity ? 0 : clamp(1 - topmost / DANGER_ZONE, 0, 1);
     dangerGlow += (target - dangerGlow) * 0.15;
 
-    if (topmost <= 0) {
+    if (topmost <= 0 && mode.topOut !== 'ignore') {
       dangerTimer += dt;
-      if (dangerTimer >= TOP_GRACE) gameOver();
+      if (dangerTimer >= TOP_GRACE) {
+        if (mode.topOut === 'time') topOutPenalty(); else endRun('topout');
+      }
     } else {
       dangerTimer = 0;
     }
+  }
+
+  // Rush does not die to the pile -- it pays for it. The board is swept and
+  // the clock takes the hit, which keeps the whole mode one continuous race.
+  function topOutPenalty() {
+    for (var i = 0; i < circles.length; i++) {
+      burst(circles[i].x, circles[i].y, circles[i].r, hpColor(circles[i].hp), 6);
+    }
+    circles.length = 0;
+
+    clock -= RUSH_TOPOUT;
+    dangerTimer = 0;
+    dangerGlow = 0;
+    flashOver = 1;
+    shake = 11;
+    spawnTimer = 0.9;
+    toast('Topped out  −' + RUSH_TOPOUT + 's');
+    beep(150, 0.35, 'sawtooth', 0.10);
+
+    if (clock <= 0) { clock = 0; endRun('time'); }
   }
 
   function frame(now) {
@@ -2183,6 +2359,7 @@
     set('--gold-ink',  shade(t.gold, -.86));
     set('--gold-glow', rgba(t.gold, .28));
 
+    set('--danger', t.danger);
     set('--scrim', rgba(t.bg, .86));
     set('--scrim-solid', rgba(t.bg, .96));
 
@@ -2478,6 +2655,36 @@
     });
   });
 
+  // ---------------------------------------------------------- modes ----
+  function renderModes() {
+    var html = '';
+    for (var id in MODES) {
+      var m = MODES[id];
+      var b = loadBest(id);
+      html += '<button class="mcard' + (m.id === mode.id ? ' active' : '') +
+        '" data-mode="' + m.id + '">' +
+        '<div class="mname">' + m.name + '</div>' +
+        '<div class="mblurb">' + m.blurb + '</div>' +
+        '<div class="mbest">' + (m.id === mode.id ? 'Selected &middot; ' : '') +
+          'Best ' + b + '</div>' +
+      '</button>';
+    }
+    modeList.innerHTML = html;
+  }
+
+  function openModes() { renderModes(); modesEl.classList.remove('hidden'); }
+  function closeModes() { modesEl.classList.add('hidden'); }
+
+  modeList.addEventListener('click', function (e) {
+    var card = e.target.closest('.mcard');
+    if (!card) return;
+    closeModes();
+    start(card.getAttribute('data-mode'));
+  });
+
+  modesBtn.addEventListener('click', openModes);
+  modesClose.addEventListener('click', closeModes);
+
   // ------------------------------------------------------- settings ----
   function syncSettings() {
     musicSw.checked = AUDIO.musicOn && !AUDIO.muted;
@@ -2539,7 +2746,8 @@
   function storeIsOpen() {
     return !storeEl.classList.contains('hidden') ||
            !buyPanel.classList.contains('hidden') ||
-           !setEl.classList.contains('hidden');
+           !setEl.classList.contains('hidden') ||
+           !modesEl.classList.contains('hidden');
   }
 
   // ------------------------------------------------------- rewarded ads
@@ -2667,6 +2875,7 @@
     chainVal = 0; chainLen = 0;
     flashOver = 0; shake = 9;
     spawnTimer = CONTINUE_GRACE;      // a breath before the next circle
+    mode.onContinue();
     setDuck(1);
     accumulator = 0; lastTime = 0;
 
@@ -2683,7 +2892,11 @@
   }
 
   // ----------------------------------------------------------- game flow
-  function start() {
+  function start(modeId) {
+    mode = MODES[modeId || mode.id] || MODES.endless;
+    gravity = mode.gravity;
+    try { localStorage.setItem(MODE_KEY, mode.id); } catch (e) {}
+
     circles.length = 0;
     particles.length = 0;
     floaters.length = 0;
@@ -2700,8 +2913,15 @@
     running = true; over = false; paused = false; started = true;
     continuesUsed = 0;
 
+    clock = 0;
+    mode.setup();
+
     elScore.textContent = '0';
-    elLevel.textContent = '1';
+    elLevelLabel.textContent = mode.hudLabel;
+    elLevel.textContent = mode.hudValue();
+    elLevel.classList.remove('urgent');
+    best = loadBest(mode.id);
+    elBest.textContent = best;
     updateChain();
     updateAbilities();
     contBox.classList.remove('show');
@@ -2713,7 +2933,7 @@
     setDuck(1);
   }
 
-  function gameOver() {
+  function endRun(reason) {
     if (over) return;
     over = true;
     running = false;
@@ -2729,21 +2949,24 @@
     }
     beep(180, 0.5, 'sawtooth', 0.09);
 
-    var isBest = score > best;
+    var isBest = mode.tracksBest && score > best;
     if (isBest) {
       best = score;
       elBest.textContent = best;
-      try { localStorage.setItem('popBest', String(best)); } catch (e) {}
+      saveBest(mode.id, best);
     }
 
-    var left = continuesLeft();
+    var left = mode.continues ? continuesLeft() : 0;
+    var cause = reason === 'time'
+      ? 'The clock ran out'
+      : 'The pile reached the top';
 
     elTitle.innerHTML = 'Game Over';
     elBlurb.innerHTML = left > 0
-      ? 'The pile reached the top &mdash; but the run isn\'t over yet.'
+      ? cause + ' &mdash; but the run isn\'t over yet.'
       : (continuesUsed > 0
-          ? 'That\'s the last continue spent.<br>Pop faster next time.'
-          : 'The pile reached the top.<br>Pop faster next time.');
+          ? 'That\'s the last continue spent.<br>' + cause + '.'
+          : cause + '.<br>Pop faster next time.');
     elFScore.textContent = score;
     elFPop.textContent = popped;
     elFTime.textContent = Math.floor(elapsed) + 's';
@@ -2802,6 +3025,7 @@
     if (e.key === 'Escape') {
       if (!buyPanel.classList.contains('hidden')) closeCheckout();
       else if (!setEl.classList.contains('hidden')) closeSettings();
+      else if (!modesEl.classList.contains('hidden')) closeModes();
       else if (!storeEl.classList.contains('hidden')) closeStore();
       return;
     }
@@ -2838,6 +3062,13 @@
       ad: AD,
       store: STORE,
       audio: AUDIO,
+      mode: function () { return mode.id; },
+      modes: MODES,
+      setMode: start,
+      clock: function () { return clock; },
+      setClock: function (v) { clock = v; },
+      openModes: openModes,
+      bestFor: loadBest,
       nodes: function () {
         return { ctx: audioCtx, master: masterGain, music: musicBus, sfx: sfxBus };
       },
@@ -2878,6 +3109,15 @@
       if (isUnlocked(candidate)) savedTheme = candidate;
     }
   } catch (e) {}
+  try {
+    var savedMode = localStorage.getItem(MODE_KEY);
+    if (savedMode && MODES[savedMode]) mode = MODES[savedMode];
+  } catch (e) {}
+  gravity = mode.gravity;
+  elLevelLabel.textContent = mode.hudLabel;
+  best = loadBest(mode.id);
+  elBest.textContent = best;
+
   applyTheme(savedTheme);
   syncSettings();
   initAbilities();
