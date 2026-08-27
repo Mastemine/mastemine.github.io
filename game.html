@@ -205,6 +205,30 @@
   canvas { display: block; width: 100%; height: 100%; }
 
   /* ---------- Overlays ---------- */
+  /* Timed-ability clock, pinned under the HUD so it never covers a circle. */
+  #buffBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--line);
+    opacity: 0;
+    transition: opacity .2s;
+    pointer-events: none;
+    z-index: 2;
+  }
+  #buffBar.on { opacity: 1; }
+  #buffBar i {
+    display: block;
+    height: 100%;
+    width: 100%;
+    background: var(--gold);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #buffBar { transition: none; }
+  }
+
   #overlay {
     position: absolute;
     inset: 0;
@@ -576,6 +600,134 @@
     text-align: right;
   }
 
+  /* ---------- Settings ---------- */
+  #settings {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #settings.hidden { display: none; }
+
+  .setbody {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .setgroup {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 4px 14px;
+  }
+  .setrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 0;
+  }
+  .setrow + .setrow { border-top: 1px solid var(--line); }
+  .setrow .rlabel { font-size: 12px; font-weight: 700; }
+  .setrow .rsub {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: .04em;
+    color: var(--muted);
+    text-transform: none;
+  }
+  .setrow.off .rlabel { opacity: .45; }
+
+  /* Switch */
+  .sw {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 26px;
+    border-radius: 300px;
+    border: 1px solid var(--line);
+    background: var(--surface-hi);
+    position: relative;
+    cursor: pointer;
+    transition: background .16s;
+  }
+  .sw::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform .16s, background .16s;
+  }
+  .sw:checked { background: var(--accent); border-color: var(--accent); }
+  .sw:checked::after { transform: translateX(18px); background: var(--accent-ink); }
+  .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Slider */
+  .slider {
+    appearance: none;
+    flex: 1 1 auto;
+    max-width: 160px;
+    height: 4px;
+    border-radius: 300px;
+    background: var(--line);
+    cursor: pointer;
+  }
+  .slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+  }
+  .slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  .slider:disabled { opacity: .35; cursor: default; }
+  .slider:disabled::-webkit-slider-thumb { background: var(--muted); cursor: default; }
+  .slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+  .setval {
+    flex: 0 0 34px;
+    text-align: right;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .setnote {
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--faint);
+    padding: 2px 4px 0;
+  }
+
+  .menurow { display: flex; gap: 8px; justify-content: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sw, .sw::after { transition: none; }
+  }
+
   /* ---------- Checkout ---------- */
   #buyPanel {
     position: absolute;
@@ -670,15 +822,15 @@
     <div class="spacer"></div>
     <span id="combo"></span>
     <div class="stat" style="text-align:right"><span class="label">Level</span><span class="value" id="level">1</span></div>
-    <button class="iconbtn abtn" id="bombBtn" title="Bomb (B)" aria-label="Arm bomb">
-      <span class="charges" id="bombCharges">3</span>
-    </button>
+    <button class="iconbtn abtn" id="dtapBtn" title="Double Tap (D)" aria-label="Double tap"></button>
+    <button class="iconbtn abtn" id="bombBtn" title="Bomb (B)" aria-label="Arm bomb"></button>
     <button class="iconbtn" id="soundBtn" title="Sound" aria-label="Toggle sound"></button>
     <button class="iconbtn" id="pauseBtn" title="Pause" aria-label="Pause"></button>
   </div>
 
   <div id="wrap">
     <canvas id="game"></canvas>
+    <div id="buffBar"><i id="buffFill"></i></div>
   </div>
 
   <div id="overlay">
@@ -705,7 +857,10 @@
         <div id="continueSub">Clears the board &middot; 2 left</div>
       </div>
       <button class="btn" id="playBtn">Play</button>
-      <button class="btn btn-ghost" id="themesBtn">Themes</button>
+      <div class="menurow">
+        <button class="btn btn-ghost" id="themesBtn">Themes</button>
+        <button class="btn btn-ghost" id="settingsBtn">Settings</button>
+      </div>
       <div class="hint" id="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
     </div>
   </div>
@@ -724,6 +879,51 @@
     <div class="storefoot">
       <button class="linkbtn" id="restoreBtn">Restore purchases</button>
       <span id="storeNote"></span>
+    </div>
+  </div>
+
+  <div id="settings" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Options</div>
+        <h2>Settings</h2>
+      </div>
+      <button class="iconbtn" id="setClose" aria-label="Close settings">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+
+    <div class="setbody">
+      <div class="setgroup">
+        <div class="setrow" id="musicRow">
+          <span class="rlabel">Music
+            <span class="rsub">Low-key techno, generated live as you play</span>
+          </span>
+          <input class="sw" type="checkbox" id="musicSw" aria-label="Music on">
+        </div>
+        <div class="setrow">
+          <span class="rlabel">Music volume</span>
+          <input class="slider" type="range" id="musicVol" min="0" max="100" step="1" aria-label="Music volume">
+          <span class="setval" id="musicVolVal">55%</span>
+        </div>
+      </div>
+
+      <div class="setgroup">
+        <div class="setrow" id="sfxRow">
+          <span class="rlabel">Sound effects
+            <span class="rsub">Pops, blasts and the game-over sting</span>
+          </span>
+          <input class="sw" type="checkbox" id="sfxSw" aria-label="Sound effects on">
+        </div>
+        <div class="setrow">
+          <span class="rlabel">Effects volume</span>
+          <input class="slider" type="range" id="sfxVol" min="0" max="100" step="1" aria-label="Effects volume">
+          <span class="setval" id="sfxVolVal">85%</span>
+        </div>
+      </div>
+
+      <p class="setnote">The speaker in the top bar mutes everything at once
+        without losing these settings.</p>
     </div>
   </div>
 
@@ -800,6 +1000,17 @@
   var adNote   = document.getElementById('adNote');
   var adCancel = document.getElementById('adCancel');
   var themesBtn= document.getElementById('themesBtn');
+  var settingsBtn=document.getElementById('settingsBtn');
+  var setEl    = document.getElementById('settings');
+  var setClose = document.getElementById('setClose');
+  var musicSw  = document.getElementById('musicSw');
+  var musicVol = document.getElementById('musicVol');
+  var musicVolVal=document.getElementById('musicVolVal');
+  var sfxSw    = document.getElementById('sfxSw');
+  var sfxVol   = document.getElementById('sfxVol');
+  var sfxVolVal= document.getElementById('sfxVolVal');
+  var musicRow = document.getElementById('musicRow');
+  var sfxRow   = document.getElementById('sfxRow');
   var storeEl  = document.getElementById('store');
   var storeGrid= document.getElementById('storeGrid');
   var storeClose=document.getElementById('storeClose');
@@ -816,7 +1027,9 @@
   var licenseKey =document.getElementById('licenseKey');
   var toastEl  = document.getElementById('toast');
   var bombBtn  = document.getElementById('bombBtn');
-  var bombChg  = document.getElementById('bombCharges');
+  var dtapBtn  = document.getElementById('dtapBtn');
+  var buffBar  = document.getElementById('buffBar');
+  var buffFill = document.getElementById('buffFill');
   var pauseBtn = document.getElementById('pauseBtn');
   var soundBtn = document.getElementById('soundBtn');
 
@@ -824,6 +1037,9 @@
     pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1.2"/><rect x="9" y="2" width="4" height="12" rx="1.2"/></svg>',
     play:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11a1 1 0 0 0 1.53.85l8.5-5.5a1 1 0 0 0 0-1.7l-8.5-5.5A1 1 0 0 0 4 2.5z"/></svg>',
     sndOn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="M10.4 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.4a6.6 6.6 0 0 1 0 9.2"/></svg>',
+    dtap:  '<svg viewBox="0 0 16 16"><text x="8" y="11.6" text-anchor="middle" ' +
+           'font-size="10.5" font-weight="800" fill="currentColor" ' +
+           'font-family="Montserrat, system-ui, sans-serif">\u00d72</text></svg>',
     bomb:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.9 1.3a.7.7 0 0 1 1 0l.6.6.5-.5a.7.7 0 1 1 1 1l-.5.5.6.6a.7.7 0 0 1-1 1l-.9-.9-.83.83a5.2 5.2 0 1 1-1-1l.83-.83-.9-.9a.7.7 0 0 1 0-1zM6.4 5.6a3.8 3.8 0 0 0-1.5 1.9.6.6 0 0 0 1.13.4A2.6 2.6 0 0 1 7 6.65a.6.6 0 1 0-.6-1.04z"/></svg>',
     sndOff:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="m10.6 6.2 3.6 3.6M14.2 6.2l-3.6 3.6"/></svg>'
   };
@@ -878,6 +1094,9 @@
 
   // Abilities are armed, then spent on the next circle you tap.
   var BOMB_CHARGES = 3;       // per run
+  var DTAP_CHARGES = 2;       // per run
+  var DTAP_SECS = 30;         // how long double tap lasts
+  var DTAP_DAMAGE = 2;        // points knocked off per tap while it runs
   var BOMB_STEP = 0.15;       // bonus per extra circle caught in one blast
   var BOMB_CAP  = 2.5;
 
@@ -896,6 +1115,7 @@
   var score = 0, best = 0, popped = 0, elapsed = 0;
   var chainVal = 0, chainLen = 0;   // start-number of the live chain, and its length
   var bombs = 0, armed = null;      // armed ability id, spent on the next tap
+  var dtaps = 0, dtapTime = 0;      // double tap charges, and seconds left on it
   var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
   var shake = 0, flashOver = 0, chainPulse = 0;
   var running = false, over = false, paused = false, started = false;
@@ -906,15 +1126,65 @@
   elBest.textContent = best;
 
   // ---------------------------------------------------------------- audio
-  var audioCtx = null, soundOn = true;
+  //
+  //   source -> musicBus -\
+  //                        >-- masterGain -> speakers
+  //   source -> sfxBus   -/
+  //
+  // Music and effects each get their own bus so either can be muted or
+  // rebalanced without touching the other; the HUD speaker is a master cut
+  // over the top of both.
+  //
+  var AUDIO_KEY = 'popAudio';
+  var AUDIO = { muted: false, musicOn: true, musicVol: 0.55, sfxOn: true, sfxVol: 0.85 };
+  try {
+    var savedAudio = JSON.parse(localStorage.getItem(AUDIO_KEY) || 'null');
+    if (savedAudio) for (var ak in AUDIO) if (ak in savedAudio) AUDIO[ak] = savedAudio[ak];
+  } catch (e) {}
+  function saveAudio() {
+    try { localStorage.setItem(AUDIO_KEY, JSON.stringify(AUDIO)); } catch (e) {}
+  }
+
+  var audioCtx = null, masterGain = null, musicBus = null, sfxBus = null, noiseBuf = null;
+  var soundOn = true;   // legacy alias kept for the ad SDK's sound hint
+
   function initAudio() {
     if (audioCtx) return;
     var AC = window.AudioContext || window.webkitAudioContext;
-    if (AC) { try { audioCtx = new AC(); } catch (e) { audioCtx = null; } }
+    if (!AC) return;
+    try { audioCtx = new AC(); } catch (e) { audioCtx = null; return; }
+
+    masterGain = audioCtx.createGain();
+    musicBus = audioCtx.createGain();
+    sfxBus = audioCtx.createGain();
+    musicBus.connect(masterGain);
+    sfxBus.connect(masterGain);
+    masterGain.connect(audioCtx.destination);
+
+    // One second of noise, reused by every hi-hat.
+    noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+    var d = noiseBuf.getChannelData(0);
+    for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+
+    applyAudio();
   }
+
+  function applyAudio() {
+    soundOn = AUDIO.sfxOn && !AUDIO.muted;
+    if (!audioCtx) return;
+    var t = audioCtx.currentTime;
+    masterGain.gain.setTargetAtTime(AUDIO.muted ? 0 : 1, t, 0.02);
+    sfxBus.gain.setTargetAtTime(AUDIO.sfxOn ? AUDIO.sfxVol : 0, t, 0.02);
+    musicBus.gain.setTargetAtTime(AUDIO.musicOn ? AUDIO.musicVol * musicDuck : 0, t, 0.08);
+  }
+
+  function resumeAudio() {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
   function beep(freq, dur, type, vol) {
-    if (!soundOn || !audioCtx) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!AUDIO.sfxOn || AUDIO.muted || !audioCtx) return;
+    resumeAudio();
     var t = audioCtx.currentTime;
     var osc = audioCtx.createOscillator();
     var gain = audioCtx.createGain();
@@ -924,14 +1194,159 @@
     gain.gain.setValueAtTime(0.0001, t);
     gain.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.connect(gain); gain.connect(sfxBus);
     osc.start(t); osc.stop(t + dur + 0.02);
   }
-  soundBtn.innerHTML = ICON.sndOn;
+
+  // ---------------------------------------------------------------- music
+  //
+  // The soundtrack is generated, not loaded. A couple of minutes of audio
+  // would be megabytes of base64 in a file that is otherwise self-contained,
+  // and it would loop with a seam. Four voices on a sixteen-step grid over a
+  // four-bar chord loop costs nothing to ship and runs forever.
+  //
+  // Voices are scheduled ahead of the clock (the standard WebAudio lookahead
+  // pattern) because setInterval alone is far too jittery for a downbeat.
+  //
+  var BPM = 116;
+  var LOOKAHEAD = 0.25;     // seconds of music queued in advance
+  var TICK = 40;            // ms between scheduler passes
+
+  var musicPlaying = false, musicTimer = null;
+  var musicStep = 0, musicNextTime = 0, musicDuck = 1;
+
+  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function stepDur() { return 60 / BPM / 4; }   // one sixteenth
+
+  // i - i - VI - VII in A minor: hypnotic, no resolution, stays out of the way.
+  var PROG = [
+    { root: 33, pad: [57, 60, 64] },   // Am
+    { root: 33, pad: [57, 60, 64] },   // Am
+    { root: 29, pad: [53, 57, 60] },   // F
+    { root: 31, pad: [55, 59, 62] }    // G
+  ];
+
+  var BASS_STEPS = [0, 6, 8, 14];
+  var HAT_STEPS  = [2, 6, 10, 14];
+  var KICK_STEPS = [0, 4, 8, 12];
+
+  function mKick(t) {
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(132, t);
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.11);
+    g.gain.setValueAtTime(0.85, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.28);
+    o.connect(g); g.connect(musicBus);
+    o.start(t); o.stop(t + 0.3);
+  }
+
+  function mHat(t, vol) {
+    var src = audioCtx.createBufferSource(); src.buffer = noiseBuf;
+    src.playbackRate.value = 1.6;
+    var hp = audioCtx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7600;
+    var g = audioCtx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.045);
+    src.connect(hp); hp.connect(g); g.connect(musicBus);
+    src.start(t); src.stop(t + 0.06);
+  }
+
+  function mBass(t, midi, dur) {
+    var o = audioCtx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.value = mtof(midi);
+    var lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 7;
+    lp.frequency.setValueAtTime(460, t);
+    lp.frequency.exponentialRampToValueAtTime(170, t + dur);
+    var g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.30, t + 0.014);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + dur);
+    o.connect(lp); lp.connect(g); g.connect(musicBus);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  function mPad(t, notes, dur) {
+    var lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    var g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.048, t + dur * 0.35);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    lp.connect(g); g.connect(musicBus);
+    for (var i = 0; i < notes.length; i++) {
+      var o = audioCtx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = mtof(notes[i]);
+      o.detune.value = (i - 1) * 5;      // a little width
+      o.connect(lp);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+
+  function mBlip(t, midi) {
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = mtof(midi);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.34);
+    o.connect(g); g.connect(musicBus);
+    o.start(t); o.stop(t + 0.36);
+  }
+
+  function scheduleStep(step, t) {
+    var bar = Math.floor(step / 16) % 4;
+    var s = step % 16;
+    var chord = PROG[bar];
+
+    if (KICK_STEPS.indexOf(s) >= 0) mKick(t);
+    if (HAT_STEPS.indexOf(s) >= 0) mHat(t, s === 6 || s === 14 ? 0.10 : 0.06);
+    if (s === 7 && bar % 2 === 1) mHat(t, 0.04);           // small ghost note
+    if (BASS_STEPS.indexOf(s) >= 0) mBass(t, chord.root, stepDur() * 1.7);
+    if (s === 0) mPad(t, chord.pad, stepDur() * 16);
+    if (s === 10 && (bar === 1 || bar === 3)) mBlip(t, chord.pad[2] + 12);
+  }
+
+  function musicScheduler() {
+    if (!audioCtx) return;
+    while (musicNextTime < audioCtx.currentTime + LOOKAHEAD) {
+      scheduleStep(musicStep, musicNextTime);
+      musicNextTime += stepDur();
+      musicStep = (musicStep + 1) % 64;    // four bars
+    }
+  }
+
+  function startMusic() {
+    initAudio();
+    if (!audioCtx || musicPlaying || !AUDIO.musicOn || AUDIO.muted) return;
+    resumeAudio();
+    musicPlaying = true;
+    musicStep = 0;
+    musicNextTime = audioCtx.currentTime + 0.15;
+    musicScheduler();
+    musicTimer = setInterval(musicScheduler, TICK);
+  }
+
+  function stopMusic() {
+    musicPlaying = false;
+    if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+  }
+
+  // Pull the music back rather than cutting it when the game is not live.
+  function setDuck(v) {
+    musicDuck = v;
+    applyAudio();
+  }
+
+  soundBtn.innerHTML = AUDIO.muted ? ICON.sndOff : ICON.sndOn;
   pauseBtn.innerHTML = ICON.pause;
   soundBtn.addEventListener('click', function () {
-    soundOn = !soundOn;
-    soundBtn.innerHTML = soundOn ? ICON.sndOn : ICON.sndOff;
+    AUDIO.muted = !AUDIO.muted;
+    soundBtn.innerHTML = AUDIO.muted ? ICON.sndOff : ICON.sndOn;
+    applyAudio();
+    saveAudio();
+    syncSettings();
+    if (!AUDIO.muted && AUDIO.musicOn && started) startMusic();
     soundBtn.blur();
   });
 
@@ -1100,7 +1515,7 @@
 
     if (armed === 'bomb') { detonate(hit); return; }
 
-    hit.hp -= 1;
+    hit.hp -= (dtapTime > 0 ? DTAP_DAMAGE : 1);
     hit.flash = 1;
 
     // A tap nudges the circle upward a touch -- feels responsive.
@@ -1311,6 +1726,17 @@
       spawnTimer = Math.max(0.45, 1.45 - elapsed * 0.013);
     }
 
+    // The buff clock only advances during live play: update() is not called
+    // while paused, on the game-over screen, or behind the store.
+    if (dtapTime > 0) {
+      dtapTime = Math.max(0, dtapTime - dt);
+      updateAbilities();
+      if (dtapTime === 0) {
+        toast('Double tap over');
+        beep(240, 0.20, 'triangle', 0.06);
+      }
+    }
+
     elLevel.textContent = level();
 
     // How close is the pile to the top?
@@ -1364,33 +1790,86 @@
   // Everything an ability needs is in this table plus one case in useAbility,
   // so adding another is a small, local change.
   //
+  // Two kinds of ability, and the table says which:
+  //
+  //   targeted  arm it, then the next circle you tap is the target
+  //   timed     fires immediately and runs on a clock
+  //
   var ABILITIES = {
     bomb: {
-      name: 'Bomb',
+      name: 'Bomb', kind: 'targeted', icon: 'bomb', el: null, badge: null,
       hint: 'Tap a circle to blast its number',
       stock: function () { return bombs; },
-      spend: function () { bombs--; }
+      spend: function () { bombs--; },
+      live:  function () { return armed === 'bomb'; },
+      label: function () { return bombs; }
+    },
+    doubleTap: {
+      name: 'Double Tap', kind: 'timed', icon: 'dtap', el: null, badge: null,
+      hint: 'Every tap counts double for ' + DTAP_SECS + 's',
+      stock: function () { return dtaps; },
+      spend: function () { dtaps--; },
+      live:  function () { return dtapTime > 0; },
+      label: function () { return dtapTime > 0 ? Math.ceil(dtapTime) : dtaps; },
+      start: function () { dtapTime = DTAP_SECS; }
     }
   };
 
+  ABILITIES.bomb.el = bombBtn;
+  ABILITIES.doubleTap.el = dtapBtn;
+
   function abilityReady(id) {
-    return started && !over && !paused && ABILITIES[id].stock() > 0;
+    var a = ABILITIES[id];
+    return started && !over && !paused && !a.live() && a.stock() > 0;
+  }
+
+  // Icons are stamped once; per-frame updates only touch text and classes.
+  function initAbilities() {
+    for (var id in ABILITIES) {
+      var a = ABILITIES[id];
+      a.el.innerHTML = ICON[a.icon] + '<span class="charges"></span>';
+      a.badge = a.el.querySelector('.charges');
+      (function (key) {
+        a.el.addEventListener('click', function () {
+          useAbility(key);
+          ABILITIES[key].el.blur();
+        });
+      })(id);
+    }
   }
 
   function updateAbilities() {
-    bombChg.textContent = bombs;
-    bombBtn.disabled = !abilityReady('bomb') && armed !== 'bomb';
-    bombBtn.classList.toggle('armed', armed === 'bomb');
-    bombBtn.innerHTML = ICON.bomb + '<span class="charges" id="bombCharges">' + bombs + '</span>';
-    bombChg = document.getElementById('bombCharges');
+    for (var id in ABILITIES) {
+      var a = ABILITIES[id];
+      a.badge.textContent = a.label();
+      a.el.classList.toggle('armed', a.live());
+      a.el.disabled = !a.live() && !abilityReady(id);
+    }
+    buffBar.classList.toggle('on', dtapTime > 0);
+    if (dtapTime > 0) buffFill.style.width = (dtapTime / DTAP_SECS * 100).toFixed(1) + '%';
   }
 
-  function armAbility(id) {
+  function useAbility(id) {
+    var a = ABILITIES[id];
+
+    if (a.kind === 'timed') {
+      // Already running? Do nothing rather than burn a charge on a
+      // double-click that only resets a clock the player can see.
+      if (a.live() || !abilityReady(id)) return;
+      a.spend();
+      a.start();
+      updateAbilities();
+      toast(a.hint);
+      beep(520, 0.10, 'square', 0.07);
+      setTimeout(function () { beep(780, 0.14, 'square', 0.06); }, 90);
+      return;
+    }
+
     if (armed === id) { armed = null; updateAbilities(); return; }
     if (!abilityReady(id)) return;
     armed = id;
     updateAbilities();
-    toast(ABILITIES[id].hint);
+    toast(a.hint);
   }
 
   function disarm() {
@@ -1437,7 +1916,7 @@
     setTimeout(function () { beep(90, 0.36, 'sawtooth', 0.08); }, 70);
   }
 
-  bombBtn.addEventListener('click', function () { armAbility('bomb'); bombBtn.blur(); });
+
 
   // ---------------------------------------------------------- themes ----
   //
@@ -1847,11 +2326,68 @@
     });
   });
 
+  // ------------------------------------------------------- settings ----
+  function syncSettings() {
+    musicSw.checked = AUDIO.musicOn && !AUDIO.muted;
+    sfxSw.checked = AUDIO.sfxOn && !AUDIO.muted;
+    musicVol.value = Math.round(AUDIO.musicVol * 100);
+    sfxVol.value = Math.round(AUDIO.sfxVol * 100);
+    musicVolVal.textContent = musicVol.value + '%';
+    sfxVolVal.textContent = sfxVol.value + '%';
+    musicVol.disabled = !musicSw.checked;
+    sfxVol.disabled = !sfxSw.checked;
+    musicRow.classList.toggle('off', !musicSw.checked);
+    sfxRow.classList.toggle('off', !sfxSw.checked);
+  }
+
+  function openSettings() { syncSettings(); setEl.classList.remove('hidden'); }
+  function closeSettings() { setEl.classList.add('hidden'); }
+
+  musicSw.addEventListener('change', function () {
+    AUDIO.musicOn = musicSw.checked;
+    // Turning either channel back on is also a way out of a master mute.
+    if (AUDIO.musicOn && AUDIO.muted) {
+      AUDIO.muted = false;
+      soundBtn.innerHTML = ICON.sndOn;
+    }
+    applyAudio(); saveAudio(); syncSettings();
+    if (AUDIO.musicOn) startMusic(); else stopMusic();
+  });
+
+  sfxSw.addEventListener('change', function () {
+    AUDIO.sfxOn = sfxSw.checked;
+    if (AUDIO.sfxOn && AUDIO.muted) {
+      AUDIO.muted = false;
+      soundBtn.innerHTML = ICON.sndOn;
+    }
+    applyAudio(); saveAudio(); syncSettings();
+    if (AUDIO.sfxOn) beep(660, 0.1, 'sine', 0.09);
+  });
+
+  musicVol.addEventListener('input', function () {
+    AUDIO.musicVol = musicVol.value / 100;
+    musicVolVal.textContent = musicVol.value + '%';
+    applyAudio();
+  });
+  musicVol.addEventListener('change', saveAudio);
+
+  sfxVol.addEventListener('input', function () {
+    AUDIO.sfxVol = sfxVol.value / 100;
+    sfxVolVal.textContent = sfxVol.value + '%';
+    applyAudio();
+  });
+  sfxVol.addEventListener('change', function () { saveAudio(); beep(720, 0.09, 'sine', 0.09); });
+
+  settingsBtn.addEventListener('click', openSettings);
+  setClose.addEventListener('click', closeSettings);
+
   themesBtn.addEventListener('click', openStore);
   storeClose.addEventListener('click', closeStore);
 
   function storeIsOpen() {
-    return !storeEl.classList.contains('hidden') || !buyPanel.classList.contains('hidden');
+    return !storeEl.classList.contains('hidden') ||
+           !buyPanel.classList.contains('hidden') ||
+           !setEl.classList.contains('hidden');
   }
 
   // ------------------------------------------------------- rewarded ads
@@ -1979,6 +2515,7 @@
     chainVal = 0; chainLen = 0;
     flashOver = 0; shake = 9;
     spawnTimer = CONTINUE_GRACE;      // a breath before the next circle
+    setDuck(1);
     accumulator = 0; lastTime = 0;
 
     updateChain();
@@ -2001,6 +2538,7 @@
     score = 0; popped = 0; elapsed = 0;
     chainVal = 0; chainLen = 0;
     bombs = BOMB_CHARGES; armed = null;
+    dtaps = DTAP_CHARGES; dtapTime = 0;
     spawnTimer = 0; dangerTimer = 0; dangerGlow = 0;
     shake = 0; flashOver = 0;
     accumulator = 0;
@@ -2016,6 +2554,8 @@
     pauseBtn.innerHTML = ICON.pause;
     overlay.classList.add('hidden');
     initAudio();
+    startMusic();
+    setDuck(1);
   }
 
   function gameOver() {
@@ -2024,6 +2564,7 @@
     running = false;
     armed = null;
     updateAbilities();
+    setDuck(0.45);
     flashOver = 1;
     shake = 10;
 
@@ -2074,6 +2615,7 @@
   function togglePause() {
     if (!started || over) return;
     paused = !paused;
+    setDuck(paused ? 0.35 : 1);
     if (paused) disarm(); else updateAbilities();
     pauseBtn.innerHTML = paused ? ICON.play : ICON.pause;
     if (paused) {
@@ -2104,6 +2646,7 @@
     // Escape backs out of checkout, then out of the store.
     if (e.key === 'Escape') {
       if (!buyPanel.classList.contains('hidden')) closeCheckout();
+      else if (!setEl.classList.contains('hidden')) closeSettings();
       else if (!storeEl.classList.contains('hidden')) closeStore();
       return;
     }
@@ -2122,7 +2665,9 @@
     } else if ((e.key === 'c' || e.key === 'C') && over) {
       requestContinue();
     } else if (e.key === 'b' || e.key === 'B') {
-      armAbility('bomb');
+      useAbility('bomb');
+    } else if (e.key === 'd' || e.key === 'D') {
+      useAbility('doubleTap');
     }
   });
 
@@ -2135,9 +2680,18 @@
       continue: requestContinue,
       ad: AD,
       store: STORE,
-      arm: armAbility,
+      audio: AUDIO,
+      nodes: function () {
+        return { ctx: audioCtx, master: masterGain, music: musicBus, sfx: sfxBus };
+      },
+      music: function () { return { playing: musicPlaying, step: musicStep, bpm: BPM }; },
+      openSettings: openSettings,
+      use: useAbility,
+      arm: useAbility,
       bombs: function () { return bombs; },
       armed: function () { return armed; },
+      dtaps: function () { return dtaps; },
+      dtapTime: function () { return dtapTime; },
       themes: THEMES,
       openStore: openStore,
       selectTheme: selectTheme,
@@ -2165,6 +2719,8 @@
     }
   } catch (e) {}
   applyTheme(savedTheme);
+  syncSettings();
+  initAbilities();
   updateAbilities();
 
   resize();
