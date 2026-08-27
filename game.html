@@ -34,13 +34,39 @@
   </script>
 -->
 <style>
+  /* Every themable colour is a token. applyTheme() in the script rewrites
+     these at runtime -- nothing below hardcodes a colour, so a new theme is
+     a data change, never a CSS change. Values here are the Midnight theme,
+     which is also what renders before the script runs. */
   :root {
     --bg: #0b1020;
+    --glow: #1b2547;
+    --app-top: #101733;
+    --app-bot: #0a0f1f;
+
     --panel: #131a30;
+    --surface: rgba(255,255,255,.045);
+    --surface-hi: rgba(255,255,255,.09);
+    --line: rgba(255,255,255,.10);
+    --shadow: rgba(0,0,0,.6);
+
     --ink: #e8edff;
     --muted: #8b95b8;
+    --faint: #5d6788;
+
     --accent: #f05f44;
+    --accent-hi: #ee4b08;
+    --accent-ink: #fff;
+    --accent-glow: rgba(240,95,68,.32);
+
     --gold: #ffd166;
+    --gold-lite: #ffe9a8;
+    --gold-deep: #f0b429;
+    --gold-ink: #2a1f05;
+    --gold-glow: rgba(255,209,102,.28);
+
+    --scrim: rgba(8,12,26,.84);
+    --scrim-solid: rgba(4,7,16,.95);
   }
 
   * { box-sizing: border-box; }
@@ -64,7 +90,7 @@
     align-items: center;
     justify-content: center;
     background:
-      radial-gradient(1200px 800px at 50% -10%, #1b2547 0%, transparent 60%),
+      radial-gradient(1200px 800px at 50% -10%, var(--glow) 0%, transparent 60%),
       var(--bg);
   }
 
@@ -75,8 +101,8 @@
     width: min(100vw, 560px);
     height: 100vh;
     height: 100dvh;
-    background: linear-gradient(180deg, #101733 0%, #0a0f1f 100%);
-    box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 30px 80px rgba(0,0,0,.6);
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+    box-shadow: 0 0 0 1px var(--line), 0 30px 80px var(--shadow);
     overflow: hidden;
     touch-action: none;
   }
@@ -89,8 +115,8 @@
     align-items: center;
     gap: 10px;
     padding: 0 12px;
-    background: rgba(255,255,255,.035);
-    border-bottom: 1px solid rgba(255,255,255,.07);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
     z-index: 3;
   }
 
@@ -118,7 +144,7 @@
     font-size: 12px;
     font-weight: 800;
     letter-spacing: .05em;
-    color: #ffd166;
+    color: var(--gold);
     opacity: 0;
     transition: opacity .15s;
     white-space: nowrap;
@@ -128,9 +154,9 @@
   .iconbtn {
     width: 36px;
     height: 36px;
-    border: 1px solid rgba(255,255,255,.12);
+    border: 1px solid var(--line);
     border-radius: 10px;
-    background: rgba(255,255,255,.05);
+    background: var(--surface);
     color: var(--ink);
     font-size: 15px;
     line-height: 1;
@@ -141,6 +167,38 @@
   }
   .iconbtn:active { transform: scale(.94); }
   .iconbtn svg { width: 16px; height: 16px; display: block; }
+  .iconbtn:disabled { opacity: .32; cursor: default; }
+
+  /* Ability buttons carry a charge badge and an armed state. */
+  .abtn { position: relative; }
+  .abtn .charges {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 300px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .abtn.armed {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow);
+    color: var(--accent);
+  }
+  .abtn:disabled .charges { background: var(--muted); }
+
+  /* On a narrow phone the ability buttons matter more than a stat you
+     also see on the game-over card. */
+  @media (max-width: 390px) {
+    #bestStat { display: none; }
+  }
 
   /* ---------- Canvas ---------- */
   #wrap { position: relative; flex: 1 1 auto; min-height: 0; }
@@ -155,7 +213,7 @@
     place-items: center;
     padding: 24px;
     text-align: center;
-    background: rgba(8, 12, 26, .82);
+    background: var(--scrim);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
@@ -181,13 +239,13 @@
     display: none;
     gap: 0;
     margin: 0 0 22px;
-    border: 1px solid rgba(255,255,255,.1);
+    border: 1px solid var(--line);
     border-radius: 14px;
     overflow: hidden;
   }
   #finalStats.show { display: grid; grid-template-columns: repeat(3, 1fr); }
   #finalStats div { padding: 12px 8px; }
-  #finalStats div + div { border-left: 1px solid rgba(255,255,255,.1); }
+  #finalStats div + div { border-left: 1px solid var(--line); }
   #finalStats .k {
     display: block;
     font-size: 9px;
@@ -205,7 +263,7 @@
     font-weight: 800;
     letter-spacing: .14em;
     text-transform: uppercase;
-    color: #ffd166;
+    color: var(--gold);
   }
   #newBest.show { display: block; }
 
@@ -219,12 +277,12 @@
     font-weight: 800;
     letter-spacing: .1em;
     text-transform: uppercase;
-    color: #fff;
+    color: var(--accent-ink);
     background: var(--accent);
     cursor: pointer;
-    box-shadow: 0 10px 24px rgba(240,95,68,.32);
+    box-shadow: 0 10px 24px var(--accent-glow);
   }
-  .btn:hover { background: #ee4b08; }
+  .btn:hover { background: var(--accent-hi); }
   .btn:active { transform: translateY(1px); }
 
   /* ---------- Continue offer ---------- */
@@ -235,11 +293,11 @@
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    color: #2a1f05;
-    background: linear-gradient(180deg, #ffe9a8 0%, var(--gold) 55%, #f0b429 100%);
-    box-shadow: 0 10px 24px rgba(255,209,102,.28);
+    color: var(--gold-ink);
+    background: linear-gradient(180deg, var(--gold-lite) 0%, var(--gold) 55%, var(--gold-deep) 100%);
+    box-shadow: 0 10px 24px var(--gold-glow);
   }
-  .btn-reward:hover { background: linear-gradient(180deg, #fff0bf 0%, #ffdb87 55%, #f5bf3d 100%); }
+  .btn-reward:hover { background: linear-gradient(180deg, var(--gold-lite) 0%, var(--gold-lite) 60%, var(--gold) 100%); }
   .btn-reward svg { width: 16px; height: 16px; flex: 0 0 auto; }
 
   .btn-ghost {
@@ -249,7 +307,7 @@
     padding: 12px 28px;
     font-size: 12px;
   }
-  .btn-ghost:hover { background: rgba(255,255,255,.06); color: var(--ink); }
+  .btn-ghost:hover { background: var(--surface-hi); color: var(--ink); }
 
   #continueSub {
     margin-top: 10px;
@@ -267,14 +325,14 @@
     display: grid;
     place-items: center;
     padding: 20px;
-    background: rgba(4, 7, 16, .94);
+    background: var(--scrim-solid);
   }
   #adPanel.hidden { display: none; }
 
   .adcard {
     width: 100%;
     max-width: 340px;
-    border: 1px solid rgba(255,255,255,.12);
+    border: 1px solid var(--line);
     border-radius: 16px;
     overflow: hidden;
     background: var(--panel);
@@ -289,8 +347,8 @@
     letter-spacing: .18em;
     text-transform: uppercase;
     color: var(--muted);
-    background: rgba(255,255,255,.04);
-    border-bottom: 1px solid rgba(255,255,255,.08);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
   }
 
   .adslot {
@@ -301,15 +359,15 @@
     text-align: center;
     padding: 20px;
     background:
-      repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 12px, transparent 12px 24px),
-      #0e1428;
+      repeating-linear-gradient(45deg, var(--surface) 0 12px, transparent 12px 24px),
+      var(--app-bot);
     overflow: hidden;
   }
   .adslot::after {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.07) 50%, transparent 70%);
+    background: linear-gradient(100deg, transparent 30%, var(--surface-hi) 50%, transparent 70%);
     transform: translateX(-100%);
     animation: sweep 2.4s linear infinite;
   }
@@ -334,7 +392,7 @@
 
   .adbar {
     height: 4px;
-    background: rgba(255,255,255,.08);
+    background: var(--line);
   }
   .adbar i {
     display: block;
@@ -370,12 +428,236 @@
   }
   #adCancel:hover { color: var(--ink); }
 
+  /* ---------- Theme store ---------- */
+  #store {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #store.hidden { display: none; }
+
+  .storehead {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 16px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-size: 9px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .storehead h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: -.01em;
+    color: var(--ink);
+  }
+
+  .storegrid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 16px;
+    align-content: start;
+  }
+
+  .tcard {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 10px;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .tcard:hover { background: var(--surface-hi); }
+  .tcard.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .tcard.bundle { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 12px; }
+  .tcard.bundle .tprev { width: 96px; flex: 0 0 96px; height: 56px; }
+  .tcard.bundle .bundletext { flex: 1 1 auto; display: flex; flex-direction: column; gap: 5px; }
+  .tcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Preview renders in the card's OWN theme colours, set inline per card. */
+  .tprev {
+    position: relative;
+    height: 74px;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+    padding: 8px;
+  }
+  .tprev i {
+    display: block;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  .tname {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .01em;
+    line-height: 1.2;
+  }
+  .tmeta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .tmeta .price { color: var(--gold); font-weight: 800; }
+  .tmeta .owned { color: var(--muted); }
+  .tmeta .live { color: var(--accent); font-weight: 800; }
+
+  .tlock {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    display: grid;
+    place-items: center;
+    background: var(--scrim);
+    color: var(--ink);
+  }
+  .tlock svg { width: 11px; height: 11px; }
+
+  .storefoot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .linkbtn {
+    appearance: none;
+    border: none;
+    background: none;
+    padding: 4px 0;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .linkbtn:hover { color: var(--ink); }
+  #storeNote {
+    font-size: 10px;
+    letter-spacing: .06em;
+    color: var(--faint);
+    text-align: right;
+  }
+
+  /* ---------- Checkout ---------- */
+  #buyPanel {
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: var(--scrim-solid);
+  }
+  #buyPanel.hidden { display: none; }
+
+  .buybody { padding: 18px 16px 4px; text-align: center; }
+  .buybody .tprev { height: 88px; margin-bottom: 14px; }
+  #buyName { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+  #buyPrice {
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--gold);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 10px;
+  }
+  #buyNote {
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--muted);
+    margin: 0 auto 14px;
+    max-width: 250px;
+  }
+  #licenseWrap { margin: 0 0 14px; }
+  #licenseWrap.hidden { display: none; }
+  #licenseKey {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-align: center;
+  }
+  #licenseKey::placeholder { color: var(--faint); }
+  #licenseKey:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .btn-sm { padding: 11px 22px; font-size: 11px; }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: absolute;
+    left: 50%;
+    bottom: 26px;
+    transform: translate(-50%, 14px);
+    z-index: 10;
+    padding: 11px 18px;
+    border-radius: 300px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    max-width: calc(100% - 44px);
+    text-align: center;
+    line-height: 1.5;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .22s, transform .22s;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (prefers-reduced-motion: reduce) {
+    #toast { transition: none; }
+  }
+
   .hint {
     margin-top: 18px;
     font-size: 10px;
     letter-spacing: .1em;
     text-transform: uppercase;
-    color: #5d6788;
+    color: var(--faint);
   }
 </style>
 </head>
@@ -384,10 +666,13 @@
 
   <div id="hud">
     <div class="stat"><span class="label">Score</span><span class="value" id="score">0</span></div>
-    <div class="stat"><span class="label">Best</span><span class="value" id="best">0</span></div>
+    <div class="stat" id="bestStat"><span class="label">Best</span><span class="value" id="best">0</span></div>
     <div class="spacer"></div>
     <span id="combo"></span>
     <div class="stat" style="text-align:right"><span class="label">Level</span><span class="value" id="level">1</span></div>
+    <button class="iconbtn abtn" id="bombBtn" title="Bomb (B)" aria-label="Arm bomb">
+      <span class="charges" id="bombCharges">3</span>
+    </button>
     <button class="iconbtn" id="soundBtn" title="Sound" aria-label="Toggle sound"></button>
     <button class="iconbtn" id="pauseBtn" title="Pause" aria-label="Pause"></button>
   </div>
@@ -408,6 +693,8 @@
       <p id="blurb">
         Circles fall and pile up. Tap one to knock a point off its
         number &mdash; at <b>0</b> it pops.<br>
+        Pop circles that <b>started on the same number</b> back to back
+        to chain them for more points.<br>
         Let the pile reach the <b>top</b> and it's over.
       </p>
       <div id="continueBox">
@@ -418,9 +705,49 @@
         <div id="continueSub">Clears the board &middot; 2 left</div>
       </div>
       <button class="btn" id="playBtn">Play</button>
+      <button class="btn btn-ghost" id="themesBtn">Themes</button>
       <div class="hint" id="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
     </div>
   </div>
+
+  <div id="store" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Store</div>
+        <h2>Themes</h2>
+      </div>
+      <button class="iconbtn" id="storeClose" aria-label="Close store">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="storegrid" id="storeGrid"></div>
+    <div class="storefoot">
+      <button class="linkbtn" id="restoreBtn">Restore purchases</button>
+      <span id="storeNote"></span>
+    </div>
+  </div>
+
+  <div id="buyPanel" class="hidden">
+    <div class="adcard">
+      <div class="adlabel"><span>Checkout</span><span>One-off purchase</span></div>
+      <div class="buybody">
+        <div class="tprev" id="buyPreview"></div>
+        <div id="buyName">Theme</div>
+        <div id="buyPrice">$0.00</div>
+        <p id="buyNote"></p>
+        <div id="licenseWrap" class="hidden">
+          <input id="licenseKey" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your license key">
+        </div>
+      </div>
+      <div class="adfoot">
+        <button class="btn btn-sm" id="buyConfirm">Complete purchase</button>
+        <button id="buyCancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <div id="adPanel" class="hidden">
     <div class="adcard">
@@ -472,6 +799,24 @@
   var adFill   = document.getElementById('adFill');
   var adNote   = document.getElementById('adNote');
   var adCancel = document.getElementById('adCancel');
+  var themesBtn= document.getElementById('themesBtn');
+  var storeEl  = document.getElementById('store');
+  var storeGrid= document.getElementById('storeGrid');
+  var storeClose=document.getElementById('storeClose');
+  var storeNote= document.getElementById('storeNote');
+  var restoreBtn=document.getElementById('restoreBtn');
+  var buyPanel = document.getElementById('buyPanel');
+  var buyPreview=document.getElementById('buyPreview');
+  var buyName  = document.getElementById('buyName');
+  var buyPrice = document.getElementById('buyPrice');
+  var buyNote  = document.getElementById('buyNote');
+  var buyConfirm=document.getElementById('buyConfirm');
+  var buyCancel= document.getElementById('buyCancel');
+  var licenseWrap=document.getElementById('licenseWrap');
+  var licenseKey =document.getElementById('licenseKey');
+  var toastEl  = document.getElementById('toast');
+  var bombBtn  = document.getElementById('bombBtn');
+  var bombChg  = document.getElementById('bombCharges');
   var pauseBtn = document.getElementById('pauseBtn');
   var soundBtn = document.getElementById('soundBtn');
 
@@ -479,6 +824,7 @@
     pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1.2"/><rect x="9" y="2" width="4" height="12" rx="1.2"/></svg>',
     play:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11a1 1 0 0 0 1.53.85l8.5-5.5a1 1 0 0 0 0-1.7l-8.5-5.5A1 1 0 0 0 4 2.5z"/></svg>',
     sndOn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="M10.4 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.4a6.6 6.6 0 0 1 0 9.2"/></svg>',
+    bomb:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.9 1.3a.7.7 0 0 1 1 0l.6.6.5-.5a.7.7 0 1 1 1 1l-.5.5.6.6a.7.7 0 0 1-1 1l-.9-.9-.83.83a5.2 5.2 0 1 1-1-1l.83-.83-.9-.9a.7.7 0 0 1 0-1zM6.4 5.6a3.8 3.8 0 0 0-1.5 1.9.6.6 0 0 0 1.13.4A2.6 2.6 0 0 1 7 6.65a.6.6 0 1 0-.6-1.04z"/></svg>',
     sndOff:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="m10.6 6.2 3.6 3.6M14.2 6.2l-3.6 3.6"/></svg>'
   };
 
@@ -523,23 +869,35 @@
   var DANGER_ZONE = 110;      // px from the top where the warning glows
   var MAX_CIRCLES = 90;
 
+  // Chain scoring: pop circles that STARTED on the same number back to
+  // back and each one is worth a little more. A circle's start value is
+  // what counts, not what it currently shows, so a half-tapped 6 still
+  // continues a chain of sixes.
+  var CHAIN_STEP = 0.25;      // added multiplier per extra link
+  var CHAIN_CAP  = 3;         // ceiling, so a long chain can't run away
+
+  // Abilities are armed, then spent on the next circle you tap.
+  var BOMB_CHARGES = 3;       // per run
+  var BOMB_STEP = 0.15;       // bonus per extra circle caught in one blast
+  var BOMB_CAP  = 2.5;
+
   var MAX_CONTINUES = 2;      // rewarded continues allowed per run
   var CONTINUE_GRACE = 2.2;   // seconds of no spawns after a continue
 
-  // Colour by remaining taps: green = nearly gone, red/violet = tough.
-  var PALETTE = [
-    '#4ade80', '#22d3ee', '#38bdf8', '#818cf8',
-    '#a78bfa', '#e879f9', '#f472b6', '#fb7185',
-    '#fb923c', '#facc15'
-  ];
+  // Canvas colours, all owned by the active theme (see applyTheme).
+  // Index 0 is a 1-tap circle, so low numbers read as "nearly gone".
+  var PALETTE = [];
+  var C_DANGER = '#f87171';
+  var C_NUM_SHADOW = 'rgba(9,13,26,0.45)';
   function hpColor(hp) { return PALETTE[Math.min(hp - 1, PALETTE.length - 1)]; }
 
   // ---------------------------------------------------------------- state
   var circles = [], particles = [], floaters = [];
   var score = 0, best = 0, popped = 0, elapsed = 0;
-  var combo = 0, comboTimer = 0;
+  var chainVal = 0, chainLen = 0;   // start-number of the live chain, and its length
+  var bombs = 0, armed = null;      // armed ability id, spent on the next tap
   var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
-  var shake = 0, flashOver = 0;
+  var shake = 0, flashOver = 0, chainPulse = 0;
   var running = false, over = false, paused = false, started = false;
   var continuesUsed = 0, adBusy = false;
   var lastTime = 0, accumulator = 0;
@@ -719,6 +1077,7 @@
       f.life -= 0.022;
       if (f.life <= 0) floaters.splice(i, 1);
     }
+    chainPulse += 0.075;
     if (shake > 0) shake = Math.max(0, shake - 0.7);
     if (flashOver > 0) flashOver = Math.max(0, flashOver - 0.02);
   }
@@ -737,7 +1096,9 @@
       var reach = c.r + 10;
       if (d <= reach && d < hitD) { hitD = d; hit = c; }
     }
-    if (!hit) { combo = 0; comboTimer = 0; updateCombo(); return; }
+    if (!hit) return;
+
+    if (armed === 'bomb') { detonate(hit); return; }
 
     hit.hp -= 1;
     hit.flash = 1;
@@ -756,29 +1117,35 @@
     if (idx >= 0) circles.splice(idx, 1);
     popped++;
 
-    combo++;
-    comboTimer = 1.6;
-    updateCombo();
+    // Same start number as the last circle popped? The chain grows.
+    // Anything else starts a fresh chain on that number.
+    if (hit.maxHp === chainVal) chainLen++;
+    else { chainVal = hit.maxHp; chainLen = 1; }
+    updateChain();
 
-    var gain = Math.round(hit.maxHp * 10 * Math.min(combo, 10) * (1 + hit.r / 120));
+    var mult = Math.min(CHAIN_CAP, 1 + CHAIN_STEP * (chainLen - 1));
+    var gain = Math.round(hit.maxHp * 10 * mult * (1 + hit.r / 120));
     score += gain;
     elScore.textContent = score;
     elScore.classList.remove('bump');
     void elScore.offsetWidth;
     elScore.classList.add('bump');
 
-    floatText(hit.x, hit.y, '+' + gain, hpColor(hit.maxHp));
+    floatText(hit.x, hit.y,
+      '+' + gain + (chainLen >= 2 ? '  \u00d7' + mult.toFixed(2).replace(/0$/, '') : ''),
+      chainLen >= 2 ? activeTheme.gold : hpColor(hit.maxHp));
     burst(hit.x, hit.y, hit.r, hpColor(hit.maxHp));
     shake = Math.min(9, 2 + hit.r * 0.09);
-    beep(520 + hit.maxHp * 30 + combo * 12, 0.13, 'sine', 0.10);
+    beep(520 + hit.maxHp * 30 + Math.min(chainLen, 8) * 26, 0.13, 'sine', 0.10);
   }
 
-  function updateCombo() {
-    if (combo >= 2) {
-      elCombo.textContent = combo + '× COMBO';
+  function updateChain() {
+    if (chainLen >= 2) {
+      elCombo.textContent = chainVal + 's \u00d7' + chainLen;
       elCombo.classList.add('on');
     } else {
       elCombo.classList.remove('on');
+      elCombo.textContent = '';
     }
   }
 
@@ -800,13 +1167,37 @@
     // Danger glow along the top edge.
     if (dangerGlow > 0.01) {
       var g = ctx.createLinearGradient(0, 0, 0, DANGER_ZONE);
-      g.addColorStop(0, 'rgba(248,113,113,' + (0.45 * dangerGlow).toFixed(3) + ')');
-      g.addColorStop(1, 'rgba(248,113,113,0)');
+      g.addColorStop(0, rgba(C_DANGER, (0.45 * dangerGlow).toFixed(3)));
+      g.addColorStop(1, rgba(C_DANGER, 0));
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, DANGER_ZONE);
 
-      ctx.fillStyle = 'rgba(248,113,113,' + (0.85 * dangerGlow).toFixed(3) + ')';
+      ctx.fillStyle = rgba(C_DANGER, (0.85 * dangerGlow).toFixed(3));
       ctx.fillRect(0, 0, W, 3);
+    }
+
+    // Armed-ability frame, so the state is visible on the playfield and
+    // not only on a 36px button in the corner.
+    if (armed) {
+      ctx.strokeStyle = rgba(activeTheme.accent, (0.35 + 0.25 * Math.sin(chainPulse * 1.6)).toFixed(3));
+      ctx.lineWidth = 3;
+      ctx.strokeRect(1.5, 1.5, W - 3, H - 3);
+    }
+
+    // Chain halos. Once a circle has been tapped its face no longer shows
+    // the number it started on, so without this the chain is guesswork.
+    if (chainLen >= 1) {
+      var pulse = 0.42 + 0.20 * Math.sin(chainPulse);
+      ctx.strokeStyle = rgba(activeTheme.gold, pulse.toFixed(3));
+      for (var h = 0; h < circles.length; h++) {
+        var hc = circles[h];
+        if (hc.maxHp !== chainVal) continue;
+        var hr = hc.r * (1 + hc.flash * 0.14) + Math.max(3, hc.r * 0.10);
+        ctx.beginPath();
+        ctx.arc(hc.x, hc.y, hr, 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(1.6, hc.r * 0.055);
+        ctx.stroke();
+      }
     }
 
     // Circles.
@@ -857,7 +1248,7 @@
       ctx.font = '800 ' + fs.toFixed(1) + 'px Montserrat, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(9,13,26,0.45)';
+      ctx.fillStyle = C_NUM_SHADOW;
       ctx.fillText(c.hp, c.x, c.y + Math.max(1, r * 0.045));
       ctx.fillStyle = '#ffffff';
       ctx.fillText(c.hp, c.x, c.y);
@@ -880,7 +1271,7 @@
     for (i = 0; i < floaters.length; i++) {
       var f = floaters[i];
       ctx.globalAlpha = Math.max(0, f.life);
-      ctx.font = '800 18px Montserrat, system-ui, sans-serif';
+      ctx.font = '800 17px Montserrat, system-ui, sans-serif';
       ctx.fillStyle = f.color;
       ctx.fillText(f.text, f.x, f.y);
     }
@@ -889,7 +1280,7 @@
     ctx.restore();
 
     if (flashOver > 0) {
-      ctx.fillStyle = 'rgba(248,113,113,' + (flashOver * 0.5).toFixed(3) + ')';
+      ctx.fillStyle = rgba(C_DANGER, (flashOver * 0.5).toFixed(3));
       ctx.fillRect(0, 0, W, H);
     }
   }
@@ -918,11 +1309,6 @@
     if (spawnTimer <= 0) {
       spawnCircle();
       spawnTimer = Math.max(0.45, 1.45 - elapsed * 0.013);
-    }
-
-    if (comboTimer > 0) {
-      comboTimer -= dt;
-      if (comboTimer <= 0) { combo = 0; updateCombo(); }
     }
 
     elLevel.textContent = level();
@@ -970,6 +1356,503 @@
     draw();
   }
   requestAnimationFrame(frame);
+
+
+  // ------------------------------------------------------- abilities ----
+  //
+  // An ability is armed from the HUD and spent on the next circle tapped.
+  // Everything an ability needs is in this table plus one case in useAbility,
+  // so adding another is a small, local change.
+  //
+  var ABILITIES = {
+    bomb: {
+      name: 'Bomb',
+      hint: 'Tap a circle to blast its number',
+      stock: function () { return bombs; },
+      spend: function () { bombs--; }
+    }
+  };
+
+  function abilityReady(id) {
+    return started && !over && !paused && ABILITIES[id].stock() > 0;
+  }
+
+  function updateAbilities() {
+    bombChg.textContent = bombs;
+    bombBtn.disabled = !abilityReady('bomb') && armed !== 'bomb';
+    bombBtn.classList.toggle('armed', armed === 'bomb');
+    bombBtn.innerHTML = ICON.bomb + '<span class="charges" id="bombCharges">' + bombs + '</span>';
+    bombChg = document.getElementById('bombCharges');
+  }
+
+  function armAbility(id) {
+    if (armed === id) { armed = null; updateAbilities(); return; }
+    if (!abilityReady(id)) return;
+    armed = id;
+    updateAbilities();
+    toast(ABILITIES[id].hint);
+  }
+
+  function disarm() {
+    if (!armed) return;
+    armed = null;
+    updateAbilities();
+  }
+
+  // Blast every circle currently SHOWING the tapped circle's number. That is
+  // its live value, not the number it started on -- a 10 tapped down to 4
+  // goes up with the other 4s, not the other 10s.
+  function detonate(target) {
+    var n = target.hp, victims = [], i;
+    for (i = 0; i < circles.length; i++) if (circles[i].hp === n) victims.push(circles[i]);
+
+    var total = 0;
+    for (i = 0; i < victims.length; i++) {
+      var c = victims[i];
+      total += Math.round(c.maxHp * 10 * (1 + c.r / 120));
+      burst(c.x, c.y, c.r, hpColor(c.hp));
+    }
+
+    var mult = Math.min(BOMB_CAP, 1 + BOMB_STEP * (victims.length - 1));
+    total = Math.round(total * mult);
+
+    for (i = circles.length - 1; i >= 0; i--) if (circles[i].hp === n) circles.splice(i, 1);
+
+    score += total;
+    popped += victims.length;
+    elScore.textContent = score;
+    elScore.classList.remove('bump');
+    void elScore.offsetWidth;
+    elScore.classList.add('bump');
+
+    floatText(target.x, target.y, '+' + total + '  \u00d7' + victims.length, activeTheme.accent);
+    shake = Math.min(14, 5 + victims.length * 1.4);
+
+    // A bomb neither builds nor breaks a chain -- it is a separate tool.
+    ABILITIES.bomb.spend();
+    armed = null;
+    updateAbilities();
+
+    beep(150, 0.30, 'sawtooth', 0.10);
+    setTimeout(function () { beep(90, 0.36, 'sawtooth', 0.08); }, 70);
+  }
+
+  bombBtn.addEventListener('click', function () { armAbility('bomb'); bombBtn.blur(); });
+
+  // ---------------------------------------------------------- themes ----
+  //
+  // A theme owns every colour on screen: the CSS tokens for the shell and
+  // the canvas palette for the balls. Adding one is a data change only.
+  // `dark` decides whether hairlines and surfaces are laid on in white or
+  // in ink, which is what lets light themes work without a second CSS pass.
+  //
+  var THEMES = [
+    {
+      id: 'midnight', name: 'Midnight', price: 0, dark: true,
+      blurb: 'Deep navy and a warm coral accent. The house look.',
+      bg: '#0b1020', glow: '#1b2547', appTop: '#101733', appBot: '#0a0f1f',
+      panel: '#131a30', ink: '#e8edff', muted: '#8b95b8', faint: '#5d6788',
+      accent: '#f05f44', accentHi: '#ee4b08', accentInk: '#ffffff',
+      gold: '#ffd166', danger: '#f87171',
+      circles: ['#4ade80', '#22d3ee', '#38bdf8', '#818cf8', '#a78bfa',
+                '#e879f9', '#f472b6', '#fb7185', '#fb923c', '#facc15']
+    },
+    {
+      id: 'neon', name: 'Neon Grid', price: 199, dark: true,
+      blurb: 'Black glass and electric magenta. Loud, on purpose.',
+      bg: '#07060f', glow: '#2a1042', appTop: '#130a26', appBot: '#06050e',
+      panel: '#170e2b', ink: '#f4ecff', muted: '#9c8ab8', faint: '#665579',
+      accent: '#ff2e88', accentHi: '#ff5ba3', accentInk: '#ffffff',
+      gold: '#ffe14d', danger: '#ff4d4d',
+      circles: ['#39ff88', '#2ee6ff', '#3b9dff', '#7b5cff', '#b14dff',
+                '#ff4dd2', '#ff2e88', '#ff5c5c', '#ff9838', '#ffe14d']
+    },
+    {
+      id: 'sunset', name: 'Sunset Pier', price: 199, dark: true,
+      blurb: 'Plum dusk running down into orange water.',
+      bg: '#170f1c', glow: '#52214a', appTop: '#2a1330', appBot: '#140b1a',
+      panel: '#241528', ink: '#ffeede', muted: '#b6909f', faint: '#7a5c68',
+      accent: '#ff7a3d', accentHi: '#ff5e14', accentInk: '#2b1206',
+      gold: '#ffc857', danger: '#ff5470',
+      circles: ['#ffd98a', '#ffb03a', '#ff8c42', '#f4693c', '#e4553f',
+                '#d94f70', '#c2528f', '#9c5aa8', '#7a5fb5', '#5a63b0']
+    },
+    {
+      id: 'reef', name: 'Deep Reef', price: 199, dark: true,
+      blurb: 'Cold teal water with a mint accent.',
+      bg: '#041a1f', glow: '#0a4a54', appTop: '#06272e', appBot: '#03151a',
+      panel: '#0a2a31', ink: '#dffaff', muted: '#7ba8b0', faint: '#4d757c',
+      accent: '#00c9a7', accentHi: '#00a98d', accentInk: '#00201b',
+      gold: '#ffd166', danger: '#ff6b6b',
+      circles: ['#7ee787', '#4fd1c5', '#38bdf8', '#5b9df9', '#7c83f0',
+                '#a86ee0', '#d16bb8', '#e0648b', '#e88a4a', '#ecc94b']
+    },
+    {
+      id: 'blossom', name: 'Blossom', price: 249, dark: false,
+      blurb: 'Daylight. Warm paper, rose accent, candy balls.',
+      bg: '#f7f1ee', glow: '#ffdfe6', appTop: '#fffaf8', appBot: '#f0e4e4',
+      panel: '#ffffff', ink: '#2c1f27', muted: '#8a7079', faint: '#b3a0a6',
+      accent: '#e0526b', accentHi: '#c93d57', accentInk: '#ffffff',
+      gold: '#c98a0e', danger: '#d63b4f',
+      circles: ['#3fbf6f', '#22b8c4', '#3f9ae0', '#6f7ae8', '#9a6fe0',
+                '#d466c4', '#e05a94', '#e0596b', '#e07d3a', '#cc9c12']
+    },
+    {
+      id: 'paper', name: 'Paper', price: 249, dark: false,
+      blurb: 'Pressed pigment on newsprint. Quiet and flat.',
+      bg: '#eceae5', glow: '#dcd8cf', appTop: '#f7f5f1', appBot: '#e4e1da',
+      panel: '#fffefb', ink: '#1c1b19', muted: '#77736c', faint: '#a5a099',
+      accent: '#1f4fd8', accentHi: '#143bb0', accentInk: '#ffffff',
+      gold: '#a8730a', danger: '#c2331f',
+      circles: ['#3f8f4f', '#1f8f8f', '#2f6fbf', '#4f4fa8', '#7a4f9f',
+                '#a8407f', '#bf3f5f', '#c2331f', '#bf7a1f', '#9c8420']
+    }
+  ];
+
+  var BUNDLE_PRICE = 599;   // unlock-everything price, in cents
+
+  function themeById(id) {
+    for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i];
+    return THEMES[0];
+  }
+
+  function money(cents) { return '$' + (cents / 100).toFixed(2); }
+
+  function rgba(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  var activeTheme = THEMES[0];
+
+  function applyTheme(t) {
+    activeTheme = t;
+    var css = document.documentElement.style;
+    // Hairlines and raised surfaces are the ink colour at low alpha, so a
+    // light theme gets dark rules instead of invisible white ones.
+    var mix = t.dark ? '255,255,255' : '28,27,25';
+    function set(k, v) { css.setProperty(k, v); }
+
+    set('--bg', t.bg);          set('--glow', t.glow);
+    set('--app-top', t.appTop); set('--app-bot', t.appBot);
+    set('--panel', t.panel);
+    set('--surface',    'rgba(' + mix + ',' + (t.dark ? '.045' : '.05') + ')');
+    set('--surface-hi', 'rgba(' + mix + ',' + (t.dark ? '.09'  : '.08') + ')');
+    set('--line',       'rgba(' + mix + ',' + (t.dark ? '.10'  : '.16') + ')');
+    set('--shadow', t.dark ? 'rgba(0,0,0,.6)' : 'rgba(60,45,50,.20)');
+
+    set('--ink', t.ink); set('--muted', t.muted); set('--faint', t.faint);
+
+    set('--accent', t.accent); set('--accent-hi', t.accentHi);
+    set('--accent-ink', t.accentInk); set('--accent-glow', rgba(t.accent, .32));
+
+    set('--gold', t.gold);
+    set('--gold-lite', shade(t.gold, .45));
+    set('--gold-deep', shade(t.gold, -.22));
+    set('--gold-ink',  shade(t.gold, -.86));
+    set('--gold-glow', rgba(t.gold, .28));
+
+    set('--scrim', rgba(t.bg, .86));
+    set('--scrim-solid', rgba(t.bg, .96));
+
+    PALETTE = t.circles;
+    C_DANGER = t.danger;
+    C_NUM_SHADOW = rgba(t.appBot, t.dark ? 0.45 : 0.30);
+
+    try { localStorage.setItem(THEME_KEY, t.id); } catch (e) {}
+  }
+
+  // ----------------------------------------------------- entitlements ----
+  //
+  // Ownership lives in localStorage. Be clear-eyed about what that means:
+  // it is per-device and a determined player can edit it. For cosmetic
+  // themes that trade is deliberate -- the alternative is accounts and a
+  // server, which is a lot of machinery to protect a colour scheme. Do NOT
+  // reuse this shape for anything that actually needs to be secure.
+  //
+  var THEME_KEY = 'popTheme', OWNED_KEY = 'popOwned';
+  var owned = {};
+
+  function loadOwned() {
+    try {
+      var raw = localStorage.getItem(OWNED_KEY);
+      owned = raw ? (JSON.parse(raw) || {}) : {};
+    } catch (e) { owned = {}; }
+  }
+  function saveOwned() {
+    try { localStorage.setItem(OWNED_KEY, JSON.stringify(owned)); } catch (e) {}
+  }
+  function isUnlocked(t) { return t.price === 0 || !!owned[t.id]; }
+  function lockedThemes() {
+    return THEMES.filter(function (t) { return !isUnlocked(t); });
+  }
+  function grant(id, via, key) {
+    owned[id] = { at: Date.now(), via: via, key: key || null };
+    saveOwned();
+  }
+
+  // ---------------------------------------------------------- store -----
+  //
+  // Checkout sits behind the same kind of boundary as the rewarded ad.
+  //
+  //   'placeholder'  no money moves, nothing is charged, and the panel says
+  //                  so. Lets the whole store flow be played and tested.
+  //
+  //   'gumroad'      a real one-off purchase. Gumroad's licence-verify
+  //                  endpoint is designed to be called from a client, which
+  //                  is what makes it workable on a static site with no
+  //                  backend: the player buys, gets a key by email, and
+  //                  pastes it here to unlock. Fill in STORE.gumroad below.
+  //
+  // For Stripe, the shape is the same but verification needs somewhere to
+  // run: a Payment Link plus a small serverless function that exchanges the
+  // checkout session for an unlock token. GitHub Pages alone cannot do it.
+  //
+  var STORE = {
+    provider: 'placeholder',      // 'placeholder' | 'gumroad'
+    gumroad: {
+      productId: '',              // from the Gumroad product's advanced tab
+      url: ''                     // e.g. https://yourname.gumroad.com/l/pop-themes
+    }
+  };
+
+  var pendingBuy = null;   // theme object, or the string 'bundle'
+  var buyStage = 0;        // gumroad: 0 = open the store page, 1 = redeem
+  var toastTimer = null;
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2200);
+  }
+
+  function previewHtml(t) {
+    var dots = [0, 3, 6, 9], sizes = [10, 14, 18, 22], out = '';
+    for (var i = 0; i < dots.length; i++) {
+      out += '<i style="width:' + sizes[i] + 'px;height:' + sizes[i] + 'px;' +
+             'background:' + t.circles[dots[i]] + '"></i>';
+    }
+    return '<div class="tprev" style="background:linear-gradient(180deg,' +
+           t.appTop + ' 0%,' + t.appBot + ' 100%)">' + out + '</div>';
+  }
+
+  // One ball from each locked theme, over a split ground -- the bundle card
+  // should look like what it sells, not like whichever theme came first.
+  function bundlePreviewHtml() {
+    var locked = lockedThemes(), out = '', sizes = [11, 15, 19, 23];
+    var pick = locked.slice(0, 4);
+    for (var i = 0; i < pick.length; i++) {
+      out += '<i style="width:' + sizes[i] + 'px;height:' + sizes[i] + 'px;' +
+             'background:' + pick[i].circles[3 + i] + '"></i>';
+    }
+    var a = pick[0] || THEMES[0], b = pick[pick.length - 1] || THEMES[1];
+    return '<div class="tprev" style="background:linear-gradient(115deg,' +
+           a.appTop + ' 0%,' + a.appBot + ' 48%,' + b.appTop + ' 52%,' +
+           b.appBot + ' 100%)">' + out + '</div>';
+  }
+
+  var LOCK_SVG = '<span class="tlock"><svg viewBox="0 0 16 16" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.7"><rect x="3.2" y="7" width="9.6" ' +
+    'height="7" rx="1.6"/><path d="M5.6 7V5a2.4 2.4 0 0 1 4.8 0v2"/></svg></span>';
+
+  function renderStore() {
+    var html = '', locked = lockedThemes();
+
+    // Bundle first, but only while it actually saves the player something.
+    if (locked.length >= 2) {
+      var sum = locked.reduce(function (a, t) { return a + t.price; }, 0);
+      html += '<button class="tcard bundle" data-id="bundle">' +
+        bundlePreviewHtml() +
+        '<div class="bundletext">' +
+          '<div class="tname">Every theme</div>' +
+          '<div class="tmeta"><span>' + locked.length + ' locked &middot; worth ' +
+            money(sum) + '</span><span class="price">' + money(BUNDLE_PRICE) + '</span></div>' +
+        '</div></button>';
+    }
+
+    for (var i = 0; i < THEMES.length; i++) {
+      var t = THEMES[i];
+      var unlocked = isUnlocked(t);
+      var active = t.id === activeTheme.id;
+      var meta = active ? '<span class="live">Active</span>'
+               : unlocked ? '<span class="owned">' + (t.price === 0 ? 'Free' : 'Owned') + '</span>'
+               : '<span class="price">' + money(t.price) + '</span>';
+
+      html += '<button class="tcard' + (active ? ' active' : '') + '" data-id="' + t.id + '">' +
+        previewHtml(t) + (unlocked ? '' : LOCK_SVG) +
+        '<div class="tname">' + t.name + '</div>' +
+        '<div class="tmeta">' + meta + '</div>' +
+      '</button>';
+    }
+
+    storeGrid.innerHTML = html;
+    storeNote.innerHTML = STORE.provider === 'placeholder'
+      ? 'Demo checkout &middot; nothing is charged'
+      : 'Purchases unlock on this device';
+  }
+
+  function openStore() {
+    renderStore();
+    storeEl.classList.remove('hidden');
+  }
+  function closeStore() { storeEl.classList.add('hidden'); }
+
+  function selectTheme(id) {
+    var t = themeById(id);
+    if (!isUnlocked(t)) return;
+    applyTheme(t);
+    renderStore();
+    toast(t.name + ' applied');
+  }
+
+  storeGrid.addEventListener('click', function (e) {
+    var card = e.target.closest('.tcard');
+    if (!card) return;
+    var id = card.getAttribute('data-id');
+    if (id === 'bundle') { openCheckout('bundle'); return; }
+    var t = themeById(id);
+    if (isUnlocked(t)) selectTheme(id); else openCheckout(t);
+  });
+
+  // ------------------------------------------------------- checkout -----
+  function openCheckout(target) {
+    pendingBuy = target;
+    buyStage = 0;
+
+    var isBundle = target === 'bundle';
+    var t = isBundle ? THEMES[0] : target;
+    var price = isBundle ? BUNDLE_PRICE : target.price;
+
+    var prev = isBundle ? bundlePreviewHtml() : previewHtml(t);
+    buyPreview.outerHTML = prev.replace('class="tprev"', 'class="tprev" id="buyPreview"');
+    buyPreview = document.getElementById('buyPreview');
+
+    buyName.textContent = isBundle ? 'Every theme' : t.name;
+    buyPrice.textContent = money(price);
+
+    licenseWrap.classList.add('hidden');
+    licenseKey.value = '';
+
+    if (STORE.provider === 'gumroad') {
+      buyNote.textContent = isBundle
+        ? 'Unlocks all themes. You will get a licence key by email — paste it back here to unlock.'
+        : t.blurb + ' You will get a licence key by email — paste it back here to unlock.';
+      buyConfirm.textContent = 'Open store page';
+    } else {
+      buyNote.innerHTML = (isBundle ? 'Unlocks every theme, now and later.' : t.blurb) +
+        '<br><b>Demo checkout — no payment provider is connected, so nothing is charged.</b>';
+      buyConfirm.textContent = 'Complete purchase';
+    }
+
+    buyPanel.classList.remove('hidden');
+  }
+
+  function closeCheckout() {
+    buyPanel.classList.add('hidden');
+    pendingBuy = null;
+    buyStage = 0;
+  }
+
+  function completePurchase(via, key) {
+    var label;
+    if (pendingBuy === 'bundle') {
+      var locked = lockedThemes();
+      for (var i = 0; i < locked.length; i++) grant(locked[i].id, via, key);
+      label = 'All themes unlocked';
+      closeCheckout();
+      renderStore();
+    } else {
+      var t = pendingBuy;
+      grant(t.id, via, key);
+      label = t.name + ' unlocked';
+      closeCheckout();
+      applyTheme(t);        // you bought it, you get to see it
+      renderStore();
+    }
+    toast(label);
+    beep(680, 0.14, 'sine', 0.09);
+    setTimeout(function () { beep(920, 0.20, 'sine', 0.08); }, 110);
+  }
+
+  // Gumroad's verify endpoint takes no secret, so it is safe to call from
+  // the page. A key that verifies is proof of purchase; anything else is a
+  // plain failure the player can read and act on.
+  function verifyGumroadKey(key, onDone) {
+    var body = new URLSearchParams();
+    body.set('product_id', STORE.gumroad.productId);
+    body.set('license_key', key);
+    body.set('increment_uses_count', 'false');
+
+    fetch('https://api.gumroad.com/v2/licenses/verify', { method: 'POST', body: body })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { onDone(!!(d && d.success), d); })
+      .catch(function () { onDone(false, null); });
+  }
+
+  buyConfirm.addEventListener('click', function () {
+    if (!pendingBuy) return;
+
+    if (STORE.provider !== 'gumroad') { completePurchase('demo', null); return; }
+
+    if (buyStage === 0) {
+      if (STORE.gumroad.url) window.open(STORE.gumroad.url, '_blank', 'noopener');
+      licenseWrap.classList.remove('hidden');
+      buyConfirm.textContent = 'Unlock';
+      buyStage = 1;
+      licenseKey.focus();
+      return;
+    }
+
+    var key = licenseKey.value.trim();
+    if (!key) { toast('Paste your licence key'); return; }
+
+    buyConfirm.textContent = 'Checking…';
+    buyConfirm.disabled = true;
+    verifyGumroadKey(key, function (ok) {
+      buyConfirm.disabled = false;
+      buyConfirm.textContent = 'Unlock';
+      if (ok) completePurchase('gumroad', key);
+      else toast('That key did not verify');
+    });
+  });
+
+  buyCancel.addEventListener('click', closeCheckout);
+
+  // Re-reads this device's record, and re-checks any stored licence keys so
+  // a refund or revoked key stops unlocking.
+  restoreBtn.addEventListener('click', function () {
+    loadOwned();
+    var keys = [];
+    for (var id in owned) if (owned[id] && owned[id].via === 'gumroad' && owned[id].key) keys.push(id);
+
+    if (!keys.length || STORE.provider !== 'gumroad') {
+      renderStore();
+      var n = Object.keys(owned).length;
+      toast(n ? n + ' purchase' + (n === 1 ? '' : 's') + ' restored' : 'Nothing to restore');
+      return;
+    }
+
+    var pending = keys.length;
+    keys.forEach(function (id) {
+      verifyGumroadKey(owned[id].key, function (ok) {
+        if (!ok) delete owned[id];
+        if (--pending === 0) {
+          saveOwned();
+          if (!isUnlocked(activeTheme)) applyTheme(THEMES[0]);
+          renderStore();
+          toast(Object.keys(owned).length + ' verified');
+        }
+      });
+    });
+  });
+
+  themesBtn.addEventListener('click', openStore);
+  storeClose.addEventListener('click', closeStore);
+
+  function storeIsOpen() {
+    return !storeEl.classList.contains('hidden') || !buyPanel.classList.contains('hidden');
+  }
 
   // ------------------------------------------------------- rewarded ads
   //
@@ -1093,12 +1976,13 @@
 
     over = false; running = true; paused = false;
     dangerTimer = 0; dangerGlow = 0;
-    combo = 0; comboTimer = 0;
+    chainVal = 0; chainLen = 0;
     flashOver = 0; shake = 9;
     spawnTimer = CONTINUE_GRACE;      // a breath before the next circle
     accumulator = 0; lastTime = 0;
 
-    updateCombo();
+    updateChain();
+    updateAbilities();
     elStats.classList.remove('show');
     elNewBest.classList.remove('show');
     contBox.classList.remove('show');
@@ -1115,7 +1999,8 @@
     particles.length = 0;
     floaters.length = 0;
     score = 0; popped = 0; elapsed = 0;
-    combo = 0; comboTimer = 0;
+    chainVal = 0; chainLen = 0;
+    bombs = BOMB_CHARGES; armed = null;
     spawnTimer = 0; dangerTimer = 0; dangerGlow = 0;
     shake = 0; flashOver = 0;
     accumulator = 0;
@@ -1124,7 +2009,8 @@
 
     elScore.textContent = '0';
     elLevel.textContent = '1';
-    updateCombo();
+    updateChain();
+    updateAbilities();
     contBox.classList.remove('show');
     elHint.innerHTML = 'Space = pause &nbsp;&middot;&nbsp; R = restart';
     pauseBtn.innerHTML = ICON.pause;
@@ -1136,6 +2022,8 @@
     if (over) return;
     over = true;
     running = false;
+    armed = null;
+    updateAbilities();
     flashOver = 1;
     shake = 10;
 
@@ -1186,6 +2074,7 @@
   function togglePause() {
     if (!started || over) return;
     paused = !paused;
+    if (paused) disarm(); else updateAbilities();
     pauseBtn.innerHTML = paused ? ICON.play : ICON.pause;
     if (paused) {
       elTitle.innerHTML = 'Paused';
@@ -1212,7 +2101,15 @@
   pauseBtn.addEventListener('click', function () { togglePause(); pauseBtn.blur(); });
 
   document.addEventListener('keydown', function (e) {
-    if (adBusy) return;
+    // Escape backs out of checkout, then out of the store.
+    if (e.key === 'Escape') {
+      if (!buyPanel.classList.contains('hidden')) closeCheckout();
+      else if (!storeEl.classList.contains('hidden')) closeStore();
+      return;
+    }
+    // Otherwise game shortcuts must not fire behind an open panel -- typing
+    // a licence key should never restart the run.
+    if (storeIsOpen() || adBusy) return;
     if (e.code === 'Space') {
       e.preventDefault();
       if (!started) { start(); }
@@ -1224,6 +2121,8 @@
       start();
     } else if ((e.key === 'c' || e.key === 'C') && over) {
       requestContinue();
+    } else if (e.key === 'b' || e.key === 'B') {
+      armAbility('bomb');
     }
   });
 
@@ -1235,6 +2134,17 @@
       start: start,
       continue: requestContinue,
       ad: AD,
+      store: STORE,
+      arm: armAbility,
+      bombs: function () { return bombs; },
+      armed: function () { return armed; },
+      themes: THEMES,
+      openStore: openStore,
+      selectTheme: selectTheme,
+      owned: function () { return owned; },
+      theme: function () { return activeTheme.id; },
+      grant: grant,
+      resetPurchases: function () { owned = {}; saveOwned(); applyTheme(THEMES[0]); renderStore(); },
       state: function () {
         return { count: circles.length, score: score, over: over,
                  paused: paused, elapsed: elapsed, popped: popped,
@@ -1243,6 +2153,19 @@
       }
     };
   }
+
+  loadOwned();
+
+  var savedTheme = THEMES[0];
+  try {
+    var savedId = localStorage.getItem(THEME_KEY);
+    if (savedId) {
+      var candidate = themeById(savedId);
+      if (isUnlocked(candidate)) savedTheme = candidate;
+    }
+  } catch (e) {}
+  applyTheme(savedTheme);
+  updateAbilities();
 
   resize();
 })();
