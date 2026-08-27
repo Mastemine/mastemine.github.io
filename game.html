@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Pop! &mdash; Circle Popping Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #131a30;
+    --ink: #e8edff;
+    --muted: #8b95b8;
+    --accent: #f05f44;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Montserrat', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(1200px 800px at 50% -10%, #1b2547 0%, transparent 60%),
+      var(--bg);
+  }
+
+  #app {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(100vw, 560px);
+    height: 100vh;
+    height: 100dvh;
+    background: linear-gradient(180deg, #101733 0%, #0a0f1f 100%);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 30px 80px rgba(0,0,0,.6);
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    flex: 0 0 auto;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    background: rgba(255,255,255,.035);
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    z-index: 3;
+  }
+
+  .stat { line-height: 1; }
+  .stat .label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .stat .value {
+    display: block;
+    font-size: 20px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  #score.bump { animation: bump .18s ease-out; }
+  @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+  .spacer { flex: 1 1 auto; }
+
+  #combo {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .05em;
+    color: #ffd166;
+    opacity: 0;
+    transition: opacity .15s;
+    white-space: nowrap;
+  }
+  #combo.on { opacity: 1; }
+
+  .iconbtn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px;
+    background: rgba(255,255,255,.05);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    padding: 0;
+  }
+  .iconbtn:active { transform: scale(.94); }
+  .iconbtn svg { width: 16px; height: 16px; display: block; }
+
+  /* ---------- Canvas ---------- */
+  #wrap { position: relative; flex: 1 1 auto; min-height: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---------- Overlays ---------- */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    text-align: center;
+    background: rgba(8, 12, 26, .82);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  #overlay.hidden { display: none; }
+
+  #overlay h1 {
+    margin: 0 0 6px;
+    font-size: 44px;
+    font-weight: 900;
+    letter-spacing: -.02em;
+  }
+  #overlay h1 .dot { color: var(--accent); }
+  #overlay p {
+    margin: 0 auto 22px;
+    max-width: 300px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--muted);
+  }
+  #overlay p b { color: var(--ink); font-weight: 700; }
+
+  #finalStats {
+    display: none;
+    gap: 0;
+    margin: 0 0 22px;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  #finalStats.show { display: grid; grid-template-columns: repeat(3, 1fr); }
+  #finalStats div { padding: 12px 8px; }
+  #finalStats div + div { border-left: 1px solid rgba(255,255,255,.1); }
+  #finalStats .k {
+    display: block;
+    font-size: 9px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  #finalStats .v { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  #newBest {
+    display: none;
+    margin: -12px 0 18px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #ffd166;
+  }
+  #newBest.show { display: block; }
+
+  .btn {
+    appearance: none;
+    border: none;
+    border-radius: 300px;
+    padding: 15px 40px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(240,95,68,.32);
+  }
+  .btn:hover { background: #ee4b08; }
+  .btn:active { transform: translateY(1px); }
+
+  .hint {
+    margin-top: 18px;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #5d6788;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="hud">
+    <div class="stat"><span class="label">Score</span><span class="value" id="score">0</span></div>
+    <div class="stat"><span class="label">Best</span><span class="value" id="best">0</span></div>
+    <div class="spacer"></div>
+    <span id="combo"></span>
+    <div class="stat" style="text-align:right"><span class="label">Level</span><span class="value" id="level">1</span></div>
+    <button class="iconbtn" id="soundBtn" title="Sound" aria-label="Toggle sound"></button>
+    <button class="iconbtn" id="pauseBtn" title="Pause" aria-label="Pause"></button>
+  </div>
+
+  <div id="wrap">
+    <canvas id="game"></canvas>
+  </div>
+
+  <div id="overlay">
+    <div>
+      <h1 id="title">Pop<span class="dot">!</span></h1>
+      <div id="newBest">New Best Score</div>
+      <div id="finalStats">
+        <div><span class="k">Score</span><span class="v" id="fScore">0</span></div>
+        <div><span class="k">Popped</span><span class="v" id="fPopped">0</span></div>
+        <div><span class="k">Time</span><span class="v" id="fTime">0s</span></div>
+      </div>
+      <p id="blurb">
+        Circles fall and pile up. Tap one to knock a point off its
+        number &mdash; at <b>0</b> it pops.<br>
+        Let the pile reach the <b>top</b> and it's over.
+      </p>
+      <button class="btn" id="playBtn">Play</button>
+      <div class="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------------------------------------------------------------- setup
+  var canvas   = document.getElementById('game');
+  var ctx      = canvas.getContext('2d');
+  var wrap     = document.getElementById('wrap');
+  var overlay  = document.getElementById('overlay');
+
+  var elScore  = document.getElementById('score');
+  var elBest   = document.getElementById('best');
+  var elLevel  = document.getElementById('level');
+  var elCombo  = document.getElementById('combo');
+  var elTitle  = document.getElementById('title');
+  var elBlurb  = document.getElementById('blurb');
+  var elStats  = document.getElementById('finalStats');
+  var elFScore = document.getElementById('fScore');
+  var elFPop   = document.getElementById('fPopped');
+  var elFTime  = document.getElementById('fTime');
+  var elNewBest= document.getElementById('newBest');
+  var playBtn  = document.getElementById('playBtn');
+  var pauseBtn = document.getElementById('pauseBtn');
+  var soundBtn = document.getElementById('soundBtn');
+
+  var ICON = {
+    pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1.2"/><rect x="9" y="2" width="4" height="12" rx="1.2"/></svg>',
+    play:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11a1 1 0 0 0 1.53.85l8.5-5.5a1 1 0 0 0 0-1.7l-8.5-5.5A1 1 0 0 0 4 2.5z"/></svg>',
+    sndOn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="M10.4 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.4a6.6 6.6 0 0 1 0 9.2"/></svg>',
+    sndOff:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="m10.6 6.2 3.6 3.6M14.2 6.2l-3.6 3.6"/></svg>'
+  };
+
+  var W = 0, H = 0, dpr = 1;
+
+  function resize() {
+    var prevW = W, prevH = H;
+    var rect = wrap.getBoundingClientRect();
+    W = Math.max(240, Math.round(rect.width));
+    H = Math.max(240, Math.round(rect.height));
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (prevW && prevH) {                 // keep the pile sensible on rotate
+      var sx = W / prevW, sy = H / prevH;
+      for (var i = 0; i < circles.length; i++) {
+        var c = circles[i];
+        c.x *= sx; c.px *= sx;
+        c.y *= sy; c.py *= sy;
+        c.x = clamp(c.x, c.r, W - c.r);
+      }
+    }
+    draw();
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 120); });
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  // ------------------------------------------------------------ constants
+  var STEP        = 1 / 60;   // fixed physics timestep (seconds)
+  var GRAVITY     = 0.20;     // px per step^2 -- deliberately gentle
+  var DAMPING     = 0.992;    // air drag
+  var MAX_FALL    = 4.6;      // terminal velocity, px per step
+  var ITERATIONS  = 5;        // collision relaxation passes
+  var RESTITUTION = 0.10;     // bounciness off floor / walls
+  var FRICTION    = 0.82;     // ground friction
+  var TOP_GRACE   = 0.40;     // seconds a circle may poke over the line
+  var DANGER_ZONE = 110;      // px from the top where the warning glows
+  var MAX_CIRCLES = 90;
+
+  // Colour by remaining taps: green = nearly gone, red/violet = tough.
+  var PALETTE = [
+    '#4ade80', '#22d3ee', '#38bdf8', '#818cf8',
+    '#a78bfa', '#e879f9', '#f472b6', '#fb7185',
+    '#fb923c', '#facc15'
+  ];
+  function hpColor(hp) { return PALETTE[Math.min(hp - 1, PALETTE.length - 1)]; }
+
+  // ---------------------------------------------------------------- state
+  var circles = [], particles = [], floaters = [];
+  var score = 0, best = 0, popped = 0, elapsed = 0;
+  var combo = 0, comboTimer = 0;
+  var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
+  var shake = 0, flashOver = 0;
+  var running = false, over = false, paused = false, started = false;
+  var lastTime = 0, accumulator = 0;
+
+  try { best = parseInt(localStorage.getItem('popBest') || '0', 10) || 0; } catch (e) { best = 0; }
+  elBest.textContent = best;
+
+  // ---------------------------------------------------------------- audio
+  var audioCtx = null, soundOn = true;
+  function initAudio() {
+    if (audioCtx) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) { try { audioCtx = new AC(); } catch (e) { audioCtx = null; } }
+  }
+  function beep(freq, dur, type, vol) {
+    if (!soundOn || !audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    var t = audioCtx.currentTime;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq * 0.6), t + dur);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  }
+  soundBtn.innerHTML = ICON.sndOn;
+  pauseBtn.innerHTML = ICON.pause;
+  soundBtn.addEventListener('click', function () {
+    soundOn = !soundOn;
+    soundBtn.innerHTML = soundOn ? ICON.sndOn : ICON.sndOff;
+    soundBtn.blur();
+  });
+
+  // ------------------------------------------------------------ spawning
+  function difficulty() { return 1 + elapsed / 26; }
+  function level() { return 1 + Math.floor(elapsed / 20); }
+
+  function radiusRange() {
+    var base = Math.min(W, 560) / 560;
+    return { min: 24 * base + 6, max: 52 * base + 8 };
+  }
+
+  function spawnCircle() {
+    if (circles.length >= MAX_CIRCLES) return;
+
+    var range = radiusRange();
+    var r = rand(range.min, range.max);
+    var sizeFactor = (r - range.min) / Math.max(1, range.max - range.min);
+    var d = difficulty();
+
+    // Bigger circles take more taps, and everything toughens up over time.
+    var hp = Math.round((0.8 + sizeFactor * 2.0) * d * rand(0.7, 1.25));
+    hp = clamp(hp, 1, 20);
+
+    // Try a few lanes and drop into the emptiest one.
+    var bestX = null, bestCost = Infinity;
+    for (var t = 0; t < 8; t++) {
+      var x = rand(r, W - r);
+      var cost = 0;
+      for (var i = 0; i < circles.length; i++) {
+        var c = circles[i];
+        if (c.y > H * 0.55) continue;                 // only the upper pile matters
+        var dx = c.x - x;
+        var reach = c.r + r + 6;
+        if (Math.abs(dx) < reach) cost += (reach - Math.abs(dx)) * (H - c.y);
+      }
+      if (cost < bestCost) { bestCost = cost; bestX = x; }
+      if (cost === 0) break;
+    }
+
+    var sy = -r - 4;
+    circles.push({
+      x: bestX, y: sy,
+      px: bestX, py: sy - rand(0.2, 0.6),
+      r: r, m: r * r,
+      hp: hp, maxHp: hp,
+      flash: 0, entered: false,
+      wobble: Math.random() * Math.PI * 2
+    });
+  }
+
+  // -------------------------------------------------------------- physics
+  function physicsStep() {
+    var i, j, c;
+
+    // Verlet integration -- stable for tall stacks.
+    for (i = 0; i < circles.length; i++) {
+      c = circles[i];
+      var vx = (c.x - c.px) * DAMPING;
+      var vy = (c.y - c.py) * DAMPING;
+      if (vy > MAX_FALL) vy = MAX_FALL;
+      c.px = c.x; c.py = c.y;
+      c.x += vx;
+      c.y += vy + GRAVITY;
+      if (!c.entered && c.y - c.r > 2) c.entered = true;
+      if (c.flash > 0) c.flash = Math.max(0, c.flash - 0.09);
+    }
+
+    // Relaxation: separate overlaps, then re-apply the container.
+    for (var pass = 0; pass < ITERATIONS; pass++) {
+      for (i = 0; i < circles.length; i++) {
+        var a = circles[i];
+        for (j = i + 1; j < circles.length; j++) {
+          var b = circles[j];
+          var dx = b.x - a.x, dy = b.y - a.y;
+          var minD = a.r + b.r;
+          if (dx > minD || dx < -minD || dy > minD || dy < -minD) continue;
+          var d2 = dx * dx + dy * dy;
+          if (d2 >= minD * minD || d2 === 0) continue;
+
+          var d = Math.sqrt(d2);
+          var overlap = (minD - d) * 0.5;
+          var nx = dx / d, ny = dy / d;
+          var total = a.m + b.m;
+          var wa = b.m / total, wb = a.m / total;
+
+          a.x -= nx * overlap * wa * 2;
+          a.y -= ny * overlap * wa * 2;
+          b.x += nx * overlap * wb * 2;
+          b.y += ny * overlap * wb * 2;
+        }
+      }
+
+      for (i = 0; i < circles.length; i++) {
+        c = circles[i];
+        if (c.x < c.r) { c.x = c.r; c.px = c.x + (c.x - c.px) * RESTITUTION; }
+        else if (c.x > W - c.r) { c.x = W - c.r; c.px = c.x + (c.x - c.px) * RESTITUTION; }
+
+        if (c.y > H - c.r) {
+          c.y = H - c.r;
+          var vyy = c.y - c.py;
+          c.py = c.y + vyy * RESTITUTION;
+          c.px = c.x - (c.x - c.px) * FRICTION;   // rolling friction on the floor
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- juice
+  function burst(x, y, r, color, count) {
+    var n = count || Math.round(8 + r * 0.5);
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var sp = rand(1.2, 5.5);
+      particles.push({
+        x: x, y: y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 1,
+        r: rand(1.5, r * 0.16),
+        life: 1, decay: rand(0.016, 0.034),
+        color: color
+      });
+    }
+  }
+
+  function floatText(x, y, text, color) {
+    floaters.push({ x: x, y: y, text: text, color: color, life: 1 });
+  }
+
+  function updateEffects() {
+    var i, p;
+    for (i = particles.length - 1; i >= 0; i--) {
+      p = particles[i];
+      p.vy += 0.16;
+      p.vx *= 0.99;
+      p.x += p.vx; p.y += p.vy;
+      p.life -= p.decay;
+      if (p.life <= 0 || p.y > H + 40) particles.splice(i, 1);
+    }
+    for (i = floaters.length - 1; i >= 0; i--) {
+      var f = floaters[i];
+      f.y -= 0.9;
+      f.life -= 0.022;
+      if (f.life <= 0) floaters.splice(i, 1);
+    }
+    if (shake > 0) shake = Math.max(0, shake - 0.7);
+    if (flashOver > 0) flashOver = Math.max(0, flashOver - 0.02);
+  }
+
+  // ----------------------------------------------------------------- taps
+  function tapAt(px, py) {
+    if (!running || paused || over) return;
+
+    // Pick the circle whose centre is nearest the tap, with a little
+    // forgiveness so small circles are still reachable on a phone.
+    var hit = null, hitD = Infinity;
+    for (var i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      var dx = px - c.x, dy = py - c.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      var reach = c.r + 10;
+      if (d <= reach && d < hitD) { hitD = d; hit = c; }
+    }
+    if (!hit) { combo = 0; comboTimer = 0; updateCombo(); return; }
+
+    hit.hp -= 1;
+    hit.flash = 1;
+
+    // A tap nudges the circle upward a touch -- feels responsive.
+    hit.py = hit.y + 0.9;
+
+    if (hit.hp > 0) {
+      burst(hit.x + (px - hit.x) * 0.4, hit.y + (py - hit.y) * 0.4, hit.r * 0.6, hpColor(hit.hp), 6);
+      beep(220 + (hit.maxHp - hit.hp) * 45, 0.06, 'triangle', 0.05);
+      return;
+    }
+
+    // Popped.
+    var idx = circles.indexOf(hit);
+    if (idx >= 0) circles.splice(idx, 1);
+    popped++;
+
+    combo++;
+    comboTimer = 1.6;
+    updateCombo();
+
+    var gain = Math.round(hit.maxHp * 10 * Math.min(combo, 10) * (1 + hit.r / 120));
+    score += gain;
+    elScore.textContent = score;
+    elScore.classList.remove('bump');
+    void elScore.offsetWidth;
+    elScore.classList.add('bump');
+
+    floatText(hit.x, hit.y, '+' + gain, hpColor(hit.maxHp));
+    burst(hit.x, hit.y, hit.r, hpColor(hit.maxHp));
+    shake = Math.min(9, 2 + hit.r * 0.09);
+    beep(520 + hit.maxHp * 30 + combo * 12, 0.13, 'sine', 0.10);
+  }
+
+  function updateCombo() {
+    if (combo >= 2) {
+      elCombo.textContent = combo + '× COMBO';
+      elCombo.classList.add('on');
+    } else {
+      elCombo.classList.remove('on');
+    }
+  }
+
+  wrap.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    initAudio();
+    var rect = canvas.getBoundingClientRect();
+    tapAt(e.clientX - rect.left, e.clientY - rect.top);
+  });
+  wrap.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  // ----------------------------------------------------------- draw frame
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.save();
+    if (shake > 0) ctx.translate(rand(-shake, shake), rand(-shake, shake));
+
+    // Danger glow along the top edge.
+    if (dangerGlow > 0.01) {
+      var g = ctx.createLinearGradient(0, 0, 0, DANGER_ZONE);
+      g.addColorStop(0, 'rgba(248,113,113,' + (0.45 * dangerGlow).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(248,113,113,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, DANGER_ZONE);
+
+      ctx.fillStyle = 'rgba(248,113,113,' + (0.85 * dangerGlow).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, 3);
+    }
+
+    // Circles.
+    for (var i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      var scale = 1 + c.flash * 0.14;
+      var r = c.r * scale;
+      var col = hpColor(c.hp);
+
+      // Body: lighter at the top, darker at the bottom.
+      var grad = ctx.createLinearGradient(c.x, c.y - r, c.x, c.y + r);
+      grad.addColorStop(0, shade(col, 0.30));
+      grad.addColorStop(0.45, col);
+      grad.addColorStop(1, shade(col, -0.40));
+
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Soft gloss, clipped to the ball.
+      ctx.save();
+      ctx.clip();
+      var hx = c.x - r * 0.30, hy = c.y - r * 0.44;
+      var hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, r * 0.9);
+      hg.addColorStop(0, 'rgba(255,255,255,0.40)');
+      hg.addColorStop(0.6, 'rgba(255,255,255,0.06)');
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = hg;
+      ctx.fillRect(c.x - r, c.y - r, r * 2, r * 2);
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.lineWidth = Math.max(1.5, r * 0.06);
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.28 + c.flash * 0.6).toFixed(3) + ')';
+      ctx.stroke();
+
+      if (c.flash > 0) {
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,' + (c.flash * 0.38).toFixed(3) + ')';
+        ctx.fill();
+      }
+
+      // Taps remaining.
+      var fs = r * (c.hp >= 10 ? 0.80 : 1.02);
+      ctx.font = '800 ' + fs.toFixed(1) + 'px Montserrat, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(9,13,26,0.45)';
+      ctx.fillText(c.hp, c.x, c.y + Math.max(1, r * 0.045));
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(c.hp, c.x, c.y);
+    }
+
+    // Particles.
+    for (i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Score pop-ups.
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (i = 0; i < floaters.length; i++) {
+      var f = floaters[i];
+      ctx.globalAlpha = Math.max(0, f.life);
+      ctx.font = '800 18px Montserrat, system-ui, sans-serif';
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+
+    if (flashOver > 0) {
+      ctx.fillStyle = 'rgba(248,113,113,' + (flashOver * 0.5).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // amt < 0 darkens toward black, amt > 0 lightens toward white.
+  function shade(hex, amt) {
+    var n = parseInt(hex.slice(1), 16);
+    var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    if (amt < 0) {
+      var f = 1 + amt;
+      r = Math.round(r * f); g = Math.round(g * f); b = Math.round(b * f);
+    } else {
+      r = Math.round(r + (255 - r) * amt);
+      g = Math.round(g + (255 - g) * amt);
+      b = Math.round(b + (255 - b) * amt);
+    }
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  // ------------------------------------------------------------ main loop
+  function update(dt) {
+    elapsed += dt;
+
+    // Spawn rate ramps up; it never gets faster than a circle every 0.5s.
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) {
+      spawnCircle();
+      spawnTimer = Math.max(0.45, 1.45 - elapsed * 0.013);
+    }
+
+    if (comboTimer > 0) {
+      comboTimer -= dt;
+      if (comboTimer <= 0) { combo = 0; updateCombo(); }
+    }
+
+    elLevel.textContent = level();
+
+    // How close is the pile to the top?
+    var topmost = Infinity;
+    for (var i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      if (!c.entered) continue;
+      if (c.y - c.py > 1.0) continue;      // still dropping -- not part of the pile
+      var t = c.y - c.r;
+      if (t < topmost) topmost = t;
+    }
+
+    var target = topmost === Infinity ? 0 : clamp(1 - topmost / DANGER_ZONE, 0, 1);
+    dangerGlow += (target - dangerGlow) * 0.15;
+
+    if (topmost <= 0) {
+      dangerTimer += dt;
+      if (dangerTimer >= TOP_GRACE) gameOver();
+    } else {
+      dangerTimer = 0;
+    }
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+
+    if (!lastTime) lastTime = now;
+    var dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    if (running && !paused && !over) {
+      accumulator += dt;
+      var steps = 0;
+      while (accumulator >= STEP && steps < 5) {
+        physicsStep();
+        accumulator -= STEP;
+        steps++;
+      }
+      update(dt);
+    }
+
+    updateEffects();
+    draw();
+  }
+  requestAnimationFrame(frame);
+
+  // ----------------------------------------------------------- game flow
+  function start() {
+    circles.length = 0;
+    particles.length = 0;
+    floaters.length = 0;
+    score = 0; popped = 0; elapsed = 0;
+    combo = 0; comboTimer = 0;
+    spawnTimer = 0; dangerTimer = 0; dangerGlow = 0;
+    shake = 0; flashOver = 0;
+    accumulator = 0;
+    running = true; over = false; paused = false; started = true;
+
+    elScore.textContent = '0';
+    elLevel.textContent = '1';
+    updateCombo();
+    pauseBtn.innerHTML = ICON.pause;
+    overlay.classList.add('hidden');
+    initAudio();
+  }
+
+  function gameOver() {
+    if (over) return;
+    over = true;
+    running = false;
+    flashOver = 1;
+    shake = 10;
+
+    // Scatter what's left, for the send-off.
+    for (var i = 0; i < circles.length; i++) {
+      burst(circles[i].x, circles[i].y, circles[i].r, hpColor(circles[i].hp), 6);
+    }
+    beep(180, 0.5, 'sawtooth', 0.09);
+
+    var isBest = score > best;
+    if (isBest) {
+      best = score;
+      elBest.textContent = best;
+      try { localStorage.setItem('popBest', String(best)); } catch (e) {}
+    }
+
+    elTitle.innerHTML = 'Game Over';
+    elBlurb.innerHTML = 'The pile reached the top.<br>Pop faster next time.';
+    elFScore.textContent = score;
+    elFPop.textContent = popped;
+    elFTime.textContent = Math.floor(elapsed) + 's';
+    elStats.classList.add('show');
+    elNewBest.classList.toggle('show', isBest);
+    playBtn.textContent = 'Play Again';
+    overlay.classList.remove('hidden');
+  }
+
+  function togglePause() {
+    if (!started || over) return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? ICON.play : ICON.pause;
+    if (paused) {
+      elTitle.innerHTML = 'Paused';
+      elBlurb.innerHTML = 'Take your time. The circles will wait.';
+      elStats.classList.remove('show');
+      elNewBest.classList.remove('show');
+      playBtn.textContent = 'Resume';
+      overlay.classList.remove('hidden');
+    } else {
+      overlay.classList.add('hidden');
+      lastTime = 0;
+    }
+  }
+
+  playBtn.addEventListener('click', function () {
+    if (paused && !over) { togglePause(); return; }
+    start();
+  });
+  pauseBtn.addEventListener('click', function () { togglePause(); pauseBtn.blur(); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!started || over) { start(); } else { togglePause(); }
+    } else if (e.key === 'r' || e.key === 'R') {
+      start();
+    }
+  });
+
+  // Exposed only for local testing:  game.html?debug
+  if (/(^|[?&])debug(=|&|$)/.test(location.search)) {
+    window.__pop = {
+      circles: circles,
+      spawn: spawnCircle,
+      start: start,
+      state: function () {
+        return { count: circles.length, score: score, over: over,
+                 paused: paused, elapsed: elapsed, popped: popped };
+      }
+    };
+  }
+
+  resize();
+})();
+</script>
+</body>
+</html>
