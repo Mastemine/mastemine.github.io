@@ -8,6 +8,31 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800;900&display=swap" rel="stylesheet">
+
+<!--
+  REAL REWARDED ADS -- not enabled.
+
+  The "watch an ad to continue" flow below runs against a local placeholder
+  so it is playable as-is. To serve real ads through Google H5 Games Ads:
+
+    1. Get an AdSense account approved for this domain, and enable
+       H5 Games Ads on it (rewarded ad formats need explicit approval).
+    2. Uncomment the two script tags below and replace the publisher ID
+       with your own ca-pub-XXXXXXXXXXXXXXXX.
+    3. In the game script, set  AD.provider = 'h5games'.
+
+  Ads will not fill on localhost or on a file:// page -- test on the live
+  site. Everything else in the continue flow stays exactly the same.
+
+  <script async
+          data-ad-frequency-hint="30s"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+          crossorigin="anonymous"></script>
+  <script>
+    window.adsbygoogle = window.adsbygoogle || [];
+    window.adBreak = window.adConfig = function (o) { adsbygoogle.push(o); };
+  </script>
+-->
 <style>
   :root {
     --bg: #0b1020;
@@ -15,6 +40,7 @@
     --ink: #e8edff;
     --muted: #8b95b8;
     --accent: #f05f44;
+    --gold: #ffd166;
   }
 
   * { box-sizing: border-box; }
@@ -201,6 +227,149 @@
   .btn:hover { background: #ee4b08; }
   .btn:active { transform: translateY(1px); }
 
+  /* ---------- Continue offer ---------- */
+  #continueBox { display: none; }
+  #continueBox.show { display: block; margin-bottom: 14px; }
+
+  .btn-reward {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #2a1f05;
+    background: linear-gradient(180deg, #ffe9a8 0%, var(--gold) 55%, #f0b429 100%);
+    box-shadow: 0 10px 24px rgba(255,209,102,.28);
+  }
+  .btn-reward:hover { background: linear-gradient(180deg, #fff0bf 0%, #ffdb87 55%, #f5bf3d 100%); }
+  .btn-reward svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    box-shadow: none;
+    padding: 12px 28px;
+    font-size: 12px;
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,.06); color: var(--ink); }
+
+  #continueSub {
+    margin-top: 10px;
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ---------- Rewarded ad panel ---------- */
+  #adPanel {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(4, 7, 16, .94);
+  }
+  #adPanel.hidden { display: none; }
+
+  .adcard {
+    width: 100%;
+    max-width: 340px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+
+  .adlabel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px;
+    font-size: 9px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(255,255,255,.04);
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+
+  .adslot {
+    position: relative;
+    height: 190px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 20px;
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 12px, transparent 12px 24px),
+      #0e1428;
+    overflow: hidden;
+  }
+  .adslot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.07) 50%, transparent 70%);
+    transform: translateX(-100%);
+    animation: sweep 2.4s linear infinite;
+  }
+  @keyframes sweep { to { transform: translateX(100%); } }
+  @media (prefers-reduced-motion: reduce) {
+    .adslot::after { animation: none; }
+  }
+
+  .adslot .big {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .adslot .small {
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--muted);
+    max-width: 220px;
+    margin: 0 auto;
+  }
+
+  .adbar {
+    height: 4px;
+    background: rgba(255,255,255,.08);
+  }
+  .adbar i {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: var(--gold);
+  }
+
+  .adfoot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  #adNote {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  #adCancel {
+    appearance: none;
+    border: none;
+    background: none;
+    padding: 4px;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  #adCancel:hover { color: var(--ink); }
+
   .hint {
     margin-top: 18px;
     font-size: 10px;
@@ -241,8 +410,33 @@
         number &mdash; at <b>0</b> it pops.<br>
         Let the pile reach the <b>top</b> and it's over.
       </p>
+      <div id="continueBox">
+        <button class="btn btn-reward" id="continueBtn">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3.2A1.7 1.7 0 0 1 3.7 1.5h8.6A1.7 1.7 0 0 1 14 3.2v7.1a1.7 1.7 0 0 1-1.7 1.7H9.1l-2.5 2.3a.6.6 0 0 1-1-.45V12H3.7A1.7 1.7 0 0 1 2 10.3zm4.4 1.5v4.1a.5.5 0 0 0 .77.42l3.2-2.05a.5.5 0 0 0 0-.84L7.17 4.28a.5.5 0 0 0-.77.42z"/></svg>
+          Watch Ad to Continue
+        </button>
+        <div id="continueSub">Clears the board &middot; 2 left</div>
+      </div>
       <button class="btn" id="playBtn">Play</button>
-      <div class="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
+      <div class="hint" id="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
+    </div>
+  </div>
+
+  <div id="adPanel" class="hidden">
+    <div class="adcard">
+      <div class="adlabel"><span>Advertisement</span><span id="adKind">Rewarded</span></div>
+      <div class="adslot">
+        <div>
+          <div class="big">Your ad goes here</div>
+          <div class="small">Placeholder slot. No ad network is connected &mdash;
+            see the notes in this file to wire one up.</div>
+        </div>
+      </div>
+      <div class="adbar"><i id="adFill"></i></div>
+      <div class="adfoot">
+        <span id="adNote">Reward unlocks in 5s</span>
+        <button id="adCancel">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -270,6 +464,14 @@
   var elFTime  = document.getElementById('fTime');
   var elNewBest= document.getElementById('newBest');
   var playBtn  = document.getElementById('playBtn');
+  var elHint   = document.getElementById('hint');
+  var contBox  = document.getElementById('continueBox');
+  var contBtn  = document.getElementById('continueBtn');
+  var contSub  = document.getElementById('continueSub');
+  var adPanel  = document.getElementById('adPanel');
+  var adFill   = document.getElementById('adFill');
+  var adNote   = document.getElementById('adNote');
+  var adCancel = document.getElementById('adCancel');
   var pauseBtn = document.getElementById('pauseBtn');
   var soundBtn = document.getElementById('soundBtn');
 
@@ -321,6 +523,9 @@
   var DANGER_ZONE = 110;      // px from the top where the warning glows
   var MAX_CIRCLES = 90;
 
+  var MAX_CONTINUES = 2;      // rewarded continues allowed per run
+  var CONTINUE_GRACE = 2.2;   // seconds of no spawns after a continue
+
   // Colour by remaining taps: green = nearly gone, red/violet = tough.
   var PALETTE = [
     '#4ade80', '#22d3ee', '#38bdf8', '#818cf8',
@@ -336,6 +541,7 @@
   var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
   var shake = 0, flashOver = 0;
   var running = false, over = false, paused = false, started = false;
+  var continuesUsed = 0, adBusy = false;
   var lastTime = 0, accumulator = 0;
 
   try { best = parseInt(localStorage.getItem('popBest') || '0', 10) || 0; } catch (e) { best = 0; }
@@ -765,6 +971,144 @@
   }
   requestAnimationFrame(frame);
 
+  // ------------------------------------------------------- rewarded ads
+  //
+  // The continue mechanic is provider-agnostic: everything below the
+  // showRewardedAd() boundary is swappable. Two providers ship here.
+  //
+  //   'placeholder'  a local stand-in with a real timed watch, so the flow
+  //                  is fully playable with no ad network attached.
+  //
+  //   'h5games'      Google's H5 Games Ads (the Ad Placement API, sold
+  //                  through AdSense). To switch: set provider below, then
+  //                  uncomment the loader at the top of this file and drop
+  //                  in your ca-pub- publisher ID. Rewarded ads there need
+  //                  an approved AdSense account and a live domain, which
+  //                  is why this file cannot ship them pre-wired.
+  //
+  var AD = {
+    provider: 'placeholder',   // 'placeholder' | 'h5games'
+    watchMs: 5000,             // placeholder watch length
+    grantOnFailure: true       // no ad available? don't strand the player
+  };
+
+  if (AD.provider === 'h5games' && typeof window.adConfig === 'function') {
+    window.adConfig({ preloadAdBreaks: 'on', sound: soundOn ? 'on' : 'off' });
+  }
+
+  var adRaf = null;
+
+  function closeAd() {
+    if (adRaf) { cancelAnimationFrame(adRaf); adRaf = null; }
+    adPanel.classList.add('hidden');
+  }
+
+  // A local stand-in: the player really does wait out the timer, so the
+  // pacing of the continue matches what a real rewarded unit would feel like.
+  function placeholderAd(onReward, onFail) {
+    var t0 = performance.now();
+    adFill.style.width = '0%';
+    adPanel.classList.remove('hidden');
+
+    (function tick() {
+      var p = Math.min(1, (performance.now() - t0) / AD.watchMs);
+      adFill.style.width = (p * 100).toFixed(1) + '%';
+      if (p < 1) {
+        adNote.textContent = 'Reward unlocks in ' + Math.ceil((1 - p) * AD.watchMs / 1000) + 's';
+        adRaf = requestAnimationFrame(tick);
+      } else {
+        adRaf = null;
+        adNote.textContent = 'Reward unlocked';
+        setTimeout(function () { onReward(); }, 420);
+      }
+    })();
+  }
+
+  // Google H5 Games Ads. adBreak() resolves through exactly one of these
+  // callbacks, so the reward is granted only on a genuine full view.
+  function h5GamesAd(onReward, onFail) {
+    if (typeof window.adBreak !== 'function') { onFail('sdk-missing'); return; }
+
+    adFill.style.width = '100%';
+    adNote.textContent = 'Loading ad\u2026';
+    adPanel.classList.remove('hidden');
+
+    var rewarded = false;
+    window.adBreak({
+      type: 'reward',
+      name: 'continue-run',
+      beforeReward: function (showAdFn) { showAdFn(); },
+      adDismissed: function () { /* closed early -- adBreakDone reports it */ },
+      adViewed:    function () { rewarded = true; onReward(); },
+      adBreakDone: function (info) {
+        if (!rewarded) onFail((info && info.breakStatus) || 'unfilled');
+      }
+    });
+  }
+
+  function showRewardedAd(onReward, onFail) {
+    if (AD.provider === 'h5games') h5GamesAd(onReward, onFail);
+    else placeholderAd(onReward, onFail);
+  }
+
+  function continuesLeft() { return MAX_CONTINUES - continuesUsed; }
+
+  function requestContinue() {
+    if (adBusy || !over || continuesLeft() <= 0) return;
+    adBusy = true;
+    var settled = false;
+
+    function reward() {
+      if (settled) return;
+      settled = true; adBusy = false;
+      closeAd();
+      resumeRun();
+    }
+
+    function fail(reason) {
+      if (settled) return;
+      settled = true; adBusy = false;
+      closeAd();
+      // A cancelled ad is the player's choice, so it costs them nothing.
+      // An ad that simply never arrived shouldn't cost them either.
+      if (reason !== 'dismissed' && AD.grantOnFailure) {
+        resumeRun();
+      } else if (reason !== 'dismissed') {
+        contSub.textContent = 'No ad available right now';
+      }
+    }
+
+    adCancel.onclick = function () { fail('dismissed'); };
+    showRewardedAd(reward, fail);
+  }
+
+  // The reward itself: sweep the board and drop the player back in.
+  function resumeRun() {
+    continuesUsed++;
+
+    for (var i = 0; i < circles.length; i++) {
+      burst(circles[i].x, circles[i].y, circles[i].r, hpColor(circles[i].hp));
+    }
+    circles.length = 0;
+
+    over = false; running = true; paused = false;
+    dangerTimer = 0; dangerGlow = 0;
+    combo = 0; comboTimer = 0;
+    flashOver = 0; shake = 9;
+    spawnTimer = CONTINUE_GRACE;      // a breath before the next circle
+    accumulator = 0; lastTime = 0;
+
+    updateCombo();
+    elStats.classList.remove('show');
+    elNewBest.classList.remove('show');
+    contBox.classList.remove('show');
+    pauseBtn.innerHTML = ICON.pause;
+    overlay.classList.add('hidden');
+
+    beep(660, 0.16, 'sine', 0.10);
+    setTimeout(function () { beep(880, 0.22, 'sine', 0.09); }, 110);
+  }
+
   // ----------------------------------------------------------- game flow
   function start() {
     circles.length = 0;
@@ -776,10 +1120,13 @@
     shake = 0; flashOver = 0;
     accumulator = 0;
     running = true; over = false; paused = false; started = true;
+    continuesUsed = 0;
 
     elScore.textContent = '0';
     elLevel.textContent = '1';
     updateCombo();
+    contBox.classList.remove('show');
+    elHint.innerHTML = 'Space = pause &nbsp;&middot;&nbsp; R = restart';
     pauseBtn.innerHTML = ICON.pause;
     overlay.classList.add('hidden');
     initAudio();
@@ -805,14 +1152,34 @@
       try { localStorage.setItem('popBest', String(best)); } catch (e) {}
     }
 
+    var left = continuesLeft();
+
     elTitle.innerHTML = 'Game Over';
-    elBlurb.innerHTML = 'The pile reached the top.<br>Pop faster next time.';
+    elBlurb.innerHTML = left > 0
+      ? 'The pile reached the top &mdash; but the run isn\'t over yet.'
+      : (continuesUsed > 0
+          ? 'That\'s the last continue spent.<br>Pop faster next time.'
+          : 'The pile reached the top.<br>Pop faster next time.');
     elFScore.textContent = score;
     elFPop.textContent = popped;
     elFTime.textContent = Math.floor(elapsed) + 's';
     elStats.classList.add('show');
     elNewBest.classList.toggle('show', isBest);
-    playBtn.textContent = 'Play Again';
+
+    // Offer a rewarded continue: clears the board, keeps the score.
+    contBox.classList.toggle('show', left > 0);
+    if (left > 0) {
+      contSub.innerHTML = 'Clears the board &middot; ' + left +
+        (left === 1 ? ' continue left' : ' continues left');
+      playBtn.textContent = 'End Run';
+      playBtn.classList.add('btn-ghost');
+      elHint.innerHTML = 'C = continue &nbsp;&middot;&nbsp; R = new run';
+    } else {
+      playBtn.textContent = 'Play Again';
+      playBtn.classList.remove('btn-ghost');
+      elHint.innerHTML = 'Space or R = new run';
+    }
+
     overlay.classList.remove('hidden');
   }
 
@@ -825,7 +1192,9 @@
       elBlurb.innerHTML = 'Take your time. The circles will wait.';
       elStats.classList.remove('show');
       elNewBest.classList.remove('show');
+      contBox.classList.remove('show');
       playBtn.textContent = 'Resume';
+      playBtn.classList.remove('btn-ghost');
       overlay.classList.remove('hidden');
     } else {
       overlay.classList.add('hidden');
@@ -834,17 +1203,27 @@
   }
 
   playBtn.addEventListener('click', function () {
+    if (adBusy) return;
     if (paused && !over) { togglePause(); return; }
+    playBtn.classList.remove('btn-ghost');
     start();
   });
+  contBtn.addEventListener('click', function () { requestContinue(); });
   pauseBtn.addEventListener('click', function () { togglePause(); pauseBtn.blur(); });
 
   document.addEventListener('keydown', function (e) {
+    if (adBusy) return;
     if (e.code === 'Space') {
       e.preventDefault();
-      if (!started || over) { start(); } else { togglePause(); }
+      if (!started) { start(); }
+      // With a continue on the table, space must not blow past the offer.
+      else if (over) { if (continuesLeft() <= 0) start(); }
+      else { togglePause(); }
     } else if (e.key === 'r' || e.key === 'R') {
+      playBtn.classList.remove('btn-ghost');
       start();
+    } else if ((e.key === 'c' || e.key === 'C') && over) {
+      requestContinue();
     }
   });
 
@@ -854,9 +1233,13 @@
       circles: circles,
       spawn: spawnCircle,
       start: start,
+      continue: requestContinue,
+      ad: AD,
       state: function () {
         return { count: circles.length, score: score, over: over,
-                 paused: paused, elapsed: elapsed, popped: popped };
+                 paused: paused, elapsed: elapsed, popped: popped,
+                 continuesUsed: continuesUsed, continuesLeft: continuesLeft(),
+                 adBusy: adBusy };
       }
     };
   }
