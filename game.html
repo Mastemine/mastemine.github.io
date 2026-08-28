@@ -203,8 +203,12 @@
 
   /* On a narrow phone the ability buttons matter more than a stat you
      also see on the game-over card. */
+  /* Note: the max-width:480px block below is later in the cascade and wins
+     at equal specificity, so this block deliberately only carries rules that
+     block does not set. Sizing the buttons here would be dead code. */
   @media (max-width: 390px) {
     #bestStat { display: none; }
+    .stat .value { font-size: 18px; }
   }
 
   /* ---------- Canvas ---------- */
@@ -236,9 +240,9 @@
   }
 
   /* Five controls plus the stats is a tight fit on a small phone. */
-  @media (max-width: 440px) {
-    #hud { gap: 6px; padding: 0 9px; }
-    .iconbtn { width: 32px; height: 32px; border-radius: 9px; }
+  @media (max-width: 480px) {
+    #hud { gap: 5px; padding: 0 8px; }
+    .iconbtn { width: 31px; height: 31px; border-radius: 9px; }
     .iconbtn svg { width: 14px; height: 14px; }
     .abtn .charges {
       top: -4px;
@@ -927,6 +931,7 @@
     <div class="spacer"></div>
     <span id="combo"></span>
     <div class="stat" style="text-align:right"><span class="label" id="levelLabel">Level</span><span class="value" id="level">1</span></div>
+    <button class="iconbtn abtn" id="freezeBtn" title="Freeze (F)" aria-label="Freeze"></button>
     <button class="iconbtn abtn" id="lightBtn" title="Lightning Touch (L)" aria-label="Lightning touch"></button>
     <button class="iconbtn abtn" id="dtapBtn" title="Double Tap (D)" aria-label="Double tap"></button>
     <button class="iconbtn abtn" id="bombBtn" title="Bomb (B)" aria-label="Arm bomb"></button>
@@ -1172,6 +1177,7 @@
   var dtapBtn  = document.getElementById('dtapBtn');
   var buffBar  = document.getElementById('buffBar');
   var lightBtn = document.getElementById('lightBtn');
+  var freezeBtn= document.getElementById('freezeBtn');
   var pauseBtn = document.getElementById('pauseBtn');
   var soundBtn = document.getElementById('soundBtn');
 
@@ -1179,6 +1185,7 @@
     pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1.2"/><rect x="9" y="2" width="4" height="12" rx="1.2"/></svg>',
     play:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11a1 1 0 0 0 1.53.85l8.5-5.5a1 1 0 0 0 0-1.7l-8.5-5.5A1 1 0 0 0 4 2.5z"/></svg>',
     sndOn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="M10.4 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.4a6.6 6.6 0 0 1 0 9.2"/></svg>',
+    freeze:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.4v13.2M2.28 4.7l11.44 6.6M2.28 11.3l11.44-6.6"/><path d="M6.3 3.1 8 4.8l1.7-1.7M6.3 12.9 8 11.2l1.7 1.7"/></svg>',
     bolt:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.4 1.2 3.6 8.7a.55.55 0 0 0 .43.9h2.9l-.9 4.9a.4.4 0 0 0 .72.3l5.8-7.5a.55.55 0 0 0-.43-.9h-2.9l.9-4.9a.4.4 0 0 0-.72-.3z"/></svg>',
     dtap:  '<svg viewBox="0 0 16 16"><text x="8" y="11.6" text-anchor="middle" ' +
            'font-size="10.5" font-weight="800" fill="currentColor" ' +
@@ -1263,7 +1270,7 @@
   // In a timed mode abilities are unlimited but bought with the clock, and
   // the pops they cause pay nothing back -- they buy board control, never
   // time. Endless and Puzzle keep counted charges instead.
-  var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 30 };
+  var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 30, freeze: 15 };
 
   // Chain scoring: pop circles that STARTED on the same number back to
   // back and each one is worth a little more. A circle's start value is
@@ -1274,6 +1281,10 @@
 
   // Abilities are armed, then spent on the next circle you tap.
   var BOMB_CHARGES = 3;       // per run
+  var FREEZE_CHARGES = 1;     // per run
+  var FREEZE_SECS = 15;       // how long everything stands still
+  var ICE = '#7fd4ff';        // freeze reads as cold in every theme
+
   var LIGHT_CHARGES = 2;      // per run
   var LIGHT_SECS = 30;        // how long lightning touch lasts
   var LIGHT_DAMAGE = 1;       // dealt to each circle touching the one tapped
@@ -1293,7 +1304,24 @@
   var PALETTE = [];
   var C_DANGER = '#f87171';
   var C_NUM_SHADOW = 'rgba(9,13,26,0.45)';
-  function hpColor(hp) { return PALETTE[Math.min(hp - 1, PALETTE.length - 1)]; }
+  // Themes carry ten circle colours but a circle can now start as high as
+  // MAX_HP, so anything past the palette is the last colour progressively
+  // deepened. Without this a 10, an 11 and a 12 would be indistinguishable
+  // -- which matters, because chains key on the number a circle started on.
+  function darkenHex(hex, amt) {
+    var n = parseInt(hex.slice(1), 16);
+    var r = Math.round(((n >> 16) & 255) * (1 - amt));
+    var g = Math.round(((n >> 8) & 255) * (1 - amt));
+    var b = Math.round((n & 255) * (1 - amt));
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  }
+
+  function hpColor(hp) {
+    var i = Math.max(0, hp - 1);
+    if (i < PALETTE.length) return PALETTE[i];
+    var over = i - PALETTE.length + 1;
+    return darkenHex(PALETTE[PALETTE.length - 1], Math.min(0.46, 0.16 * over));
+  }
 
   // ---------------------------------------------------------------- state
   var circles = [], particles = [], floaters = [];
@@ -1302,6 +1330,8 @@
   var bombs = 0, armed = null;      // armed ability id, spent on the next tap
   var dtaps = 0, dtapTime = 0;      // double tap charges, and seconds left on it
   var lights = 0, lightTime = 0;    // lightning touch charges, and seconds left
+  var freezes = 0, freezeTime = 0;  // freeze charges, and seconds left
+  var lastBossLevel = 0;            // so each boss level spawns exactly one
   var arcs = [];                    // live lightning bolts, purely decorative
   var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
   var shake = 0, flashOver = 0, chainPulse = 0;
@@ -1630,6 +1660,7 @@
         bombs = (lv.grants && lv.grants.bomb) || 0;
         dtaps = (lv.grants && lv.grants.doubleTap) || 0;
         lights = (lv.grants && lv.grants.lightning) || 0;
+        freezes = 0;                     // nothing moves in Puzzle
       },
       tick: function () {
         if (puzzleWon) return;
@@ -1762,12 +1793,44 @@
   }
 
   // ------------------------------------------------------------ spawning
-  function difficulty() { return 1 + elapsed / 26; }
+  // Seconds of play per +1 to the difficulty multiplier. Bigger = the
+  // numbers climb more slowly, which is the main knob on how long a run
+  // stays playable before it outruns you.
+  var HP_RAMP = 45;
+  var MAX_HP = 12;    // the ceiling: past this it stops being keepable-up-with
+
+  // Bosses arrive every fifth level: 15 at level 5, then +5 each time, so
+  // bossHp(level) is simply 10 + level. They are big, and abilities do not
+  // touch them -- a boss only ever comes down one plain tap at a time.
+  var BOSS_EVERY = 5;
+  var BOSS_SIZE = 1.7;        // multiple of the largest normal radius
+  function bossHp(lv) { return 10 + lv; }
+
+  function difficulty() { return 1 + elapsed / HP_RAMP; }
   function level() { return 1 + Math.floor(elapsed / 20); }
 
   function radiusRange() {
     var base = Math.min(W, 560) / 560;
     return { min: 24 * base + 6, max: 52 * base + 8 };
+  }
+
+  function spawnBoss(lv) {
+    var range = radiusRange();
+    var r = range.max * BOSS_SIZE;
+    var x = clamp(W / 2 + rand(-W * 0.18, W * 0.18), r, W - r);
+    var y = -r - 4;
+
+    circles.push({
+      x: x, y: y, px: x, py: y - 0.4,
+      r: r, m: r * r,
+      hp: bossHp(lv), maxHp: bossHp(lv),
+      flash: 0, entered: false, boss: true,
+      wobble: Math.random() * Math.PI * 2
+    });
+
+    toast('Boss \u00b7 ' + bossHp(lv) + ' taps \u00b7 immune to abilities');
+    beep(110, 0.5, 'sawtooth', 0.10);
+    setTimeout(function () { beep(88, 0.55, 'sawtooth', 0.09); }, 180);
   }
 
   function spawnCircle() {
@@ -1780,7 +1843,7 @@
 
     // Bigger circles take more taps, and everything toughens up over time.
     var hp = Math.round((0.8 + sizeFactor * 2.0) * d * rand(0.7, 1.25));
-    hp = clamp(hp, 1, 20);
+    hp = clamp(hp, 1, MAX_HP);
 
     // Try a few lanes and drop into the emptiest one.
     var bestX = null, bestCost = Infinity;
@@ -1943,7 +2006,8 @@
     // what was actually touching at the moment of the tap.
     var contacts = lightTime > 0 ? touching(hit) : null;
 
-    hit.hp -= (dtapTime > 0 ? DTAP_DAMAGE : 1);
+    // A boss only ever comes down one plain tap at a time.
+    hit.hp -= (dtapTime > 0 && !hit.boss ? DTAP_DAMAGE : 1);
     hit.flash = 1;
 
     // A tap nudges the circle upward a touch -- feels responsive. Puzzle
@@ -2029,6 +2093,7 @@
       var c = contacts[i];
       var idx = circles.indexOf(c);
       if (idx < 0) continue;            // already gone (it was the tapped one)
+      if (c.boss) { deflect(c); continue; }
 
       struck++;
       arcs.push({ pts: bolt(src.x, src.y, c.x, c.y), life: 1 });
@@ -2145,6 +2210,18 @@
       ctx.strokeStyle = 'rgba(255,255,255,' + (0.28 + c.flash * 0.6).toFixed(3) + ')';
       ctx.stroke();
 
+      if (c.boss) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r + Math.max(5, r * 0.10), 0, Math.PI * 2);
+        ctx.setLineDash([r * 0.22, r * 0.16]);
+        ctx.lineDashOffset = -chainPulse * 7;
+        ctx.lineWidth = Math.max(2.5, r * 0.055);
+        ctx.strokeStyle = rgba(activeTheme.gold, (0.65 + 0.25 * Math.sin(chainPulse)).toFixed(3));
+        ctx.stroke();
+        ctx.restore();
+      }
+
       if (c.flash > 0) {
         ctx.beginPath();
         ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
@@ -2153,7 +2230,7 @@
       }
 
       // Taps remaining.
-      var fs = r * (c.hp >= 10 ? 0.80 : 1.02);
+      var fs = r * (c.hp >= 10 ? 0.72 : 0.95);
       ctx.font = '800 ' + fs.toFixed(1) + 'px Montserrat, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -2210,6 +2287,37 @@
     }
     ctx.globalAlpha = 1;
 
+    // Frost: a cold wash, a rime around the edge, and a ring on every
+    // circle, so a frozen board reads as frozen and not merely as lag.
+    if (freezeTime > 0) {
+      var fade = Math.min(1, freezeTime / 0.6);       // melt out at the end
+      var shimmer = 0.5 + 0.5 * Math.sin(chainPulse * 0.8);
+
+      ctx.save();
+      ctx.globalAlpha = fade;
+
+      for (i = 0; i < circles.length; i++) {
+        var fc = circles[i];
+        ctx.beginPath();
+        ctx.arc(fc.x, fc.y, fc.r + 2, 0, Math.PI * 2);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = rgba(ICE, (0.5 + 0.25 * shimmer).toFixed(3));
+        ctx.stroke();
+      }
+
+      var fg = ctx.createLinearGradient(0, 0, 0, H);
+      fg.addColorStop(0, rgba(ICE, 0.16));
+      fg.addColorStop(0.5, rgba(ICE, 0.07));
+      fg.addColorStop(1, rgba(ICE, 0.16));
+      ctx.fillStyle = fg;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = rgba(ICE, (0.45 + 0.2 * shimmer).toFixed(3));
+      ctx.strokeRect(2, 2, W - 4, H - 4);
+      ctx.restore();
+    }
+
     ctx.restore();
 
     if (flashOver > 0) {
@@ -2237,8 +2345,10 @@
   function update(dt) {
     elapsed += dt;
 
-    // Spawn cadence belongs to the mode; Puzzle does not spawn at all.
-    if (mode.spawns) {
+    // Spawn cadence belongs to the mode; Puzzle does not spawn at all, and
+    // nothing new drops while the board is frozen. The timer is left alone
+    // rather than reset, so the cadence resumes where it left off.
+    if (mode.spawns && freezeTime <= 0) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
         spawnCircle();
@@ -2262,7 +2372,19 @@
       ticked = true;
       if (lightTime === 0) { toast(ABILITIES.lightning.done); beep(240, 0.20, 'triangle', 0.06); }
     }
+    if (freezeTime > 0) {
+      freezeTime = Math.max(0, freezeTime - dt);
+      ticked = true;
+      if (freezeTime === 0) { toast(ABILITIES.freeze.done); beep(300, 0.22, 'triangle', 0.06); }
+    }
     if (ticked) updateAbilities();
+
+    // One boss per qualifying level, in the modes that actually spawn.
+    var lv = level();
+    if (mode.spawns && lv !== lastBossLevel && lv % BOSS_EVERY === 0) {
+      lastBossLevel = lv;
+      spawnBoss(lv);
+    }
 
     elLevel.textContent = mode.hudValue();
     if (mode.id === 'rush') elLevel.classList.toggle('urgent', clock <= 5);
@@ -2280,7 +2402,10 @@
     var target = topmost === Infinity ? 0 : clamp(1 - topmost / DANGER_ZONE, 0, 1);
     dangerGlow += (target - dangerGlow) * 0.15;
 
-    if (topmost <= 0 && mode.topOut !== 'ignore') {
+    // A frozen board cannot get any worse, so the top-out fuse is held too.
+    // That is the point of the ability: freezing while buried buys you the
+    // 15 seconds to dig out instead of watching the run end anyway.
+    if (topmost <= 0 && mode.topOut !== 'ignore' && freezeTime <= 0) {
       dangerTimer += dt;
       if (dangerTimer >= TOP_GRACE) {
         if (mode.topOut === 'time') topOutPenalty(); else endRun('topout');
@@ -2318,12 +2443,20 @@
     lastTime = now;
 
     if (running && !paused && !over) {
-      accumulator += dt;
-      var steps = 0;
-      while (accumulator >= STEP && steps < 5) {
-        physicsStep();
-        accumulator -= STEP;
-        steps++;
+      if (freezeTime > 0) {
+        // Skip the solver entirely rather than zeroing gravity: Verlet holds
+        // velocity in the previous position, so not stepping leaves every
+        // circle exactly where it is and lets it resume its fall on thaw.
+        // Drop the accumulator so no backlog of steps fires all at once.
+        accumulator = 0;
+      } else {
+        accumulator += dt;
+        var steps = 0;
+        while (accumulator >= STEP && steps < 5) {
+          physicsStep();
+          accumulator -= STEP;
+          steps++;
+        }
       }
       update(dt);
     }
@@ -2378,12 +2511,28 @@
       start: function () { lightTime = LIGHT_SECS; },
       secs: LIGHT_SECS, time: function () { return lightTime; }, bar: 'var(--accent)',
       done: 'Lightning touch over'
+    },
+    freeze: {
+      name: 'Freeze', kind: 'timed', icon: 'freeze', el: null, badge: null,
+      // Nothing falls in Puzzle, so there is nothing here to freeze --
+      // the button is hidden there rather than offered and useless.
+      needsMotion: true,
+      hint: 'Everything stops for ' + FREEZE_SECS + 's',
+      stock: function () { return freezes; },
+      spend: function () { freezes--; },
+      restock: function () { freezes++; },
+      live:  function () { return freezeTime > 0; },
+      label: function () { return freezeTime > 0 ? Math.ceil(freezeTime) : freezes; },
+      start: function () { freezeTime = FREEZE_SECS; },
+      secs: FREEZE_SECS, time: function () { return freezeTime; }, bar: ICE,
+      done: 'Thawed'
     }
   };
 
   ABILITIES.bomb.el = bombBtn;
   ABILITIES.doubleTap.el = dtapBtn;
   ABILITIES.lightning.el = lightBtn;
+  ABILITIES.freeze.el = freezeBtn;
 
   function abilityReady(id) {
     var a = ABILITIES[id];
@@ -2425,6 +2574,7 @@
         ? (a.live() ? a.label() : ABILITY_SECS[id] + 's')
         : a.label();
       a.el.classList.toggle('priced', !!mode.paysWithTime);
+      a.el.style.display = (a.needsMotion && !mode.spawns) ? 'none' : '';
       a.el.classList.toggle('armed', a.live());
       a.el.disabled = !a.live() && !abilityReady(id);
 
@@ -2490,9 +2640,28 @@
   // Blast every circle currently SHOWING the tapped circle's number. That is
   // its live value, not the number it started on -- a 10 tapped down to 4
   // goes up with the other 4s, not the other 10s.
+  // Visible proof that an ability was shrugged off, so immunity reads as a
+  // rule rather than as a bug.
+  function deflect(c) {
+    burst(c.x, c.y - c.r * 0.6, c.r * 0.35, activeTheme.gold, 7);
+    c.flash = Math.max(c.flash, 0.5);
+  }
+
   function detonate(target) {
+    if (target.boss) {
+      deflect(target);
+      toast('Bosses are immune');
+      beep(150, 0.16, 'square', 0.06);
+      armed = null;
+      updateAbilities();
+      return;
+    }
     var n = target.hp, victims = [], i;
-    for (i = 0; i < circles.length; i++) if (circles[i].hp === n) victims.push(circles[i]);
+    for (i = 0; i < circles.length; i++) {
+      if (circles[i].hp !== n) continue;
+      if (circles[i].boss) { deflect(circles[i]); continue; }
+      victims.push(circles[i]);
+    }
 
     var total = 0;
     for (i = 0; i < victims.length; i++) {
@@ -2504,7 +2673,9 @@
     var mult = Math.min(BOMB_CAP, 1 + BOMB_STEP * (victims.length - 1));
     total = Math.round(total * mult);
 
-    for (i = circles.length - 1; i >= 0; i--) if (circles[i].hp === n) circles.splice(i, 1);
+    for (i = circles.length - 1; i >= 0; i--) {
+      if (circles[i].hp === n && !circles[i].boss) circles.splice(i, 1);
+    }
 
     score += total;
     popped += victims.length;
@@ -3223,6 +3394,8 @@
     bombs = BOMB_CHARGES; armed = null;
     dtaps = DTAP_CHARGES; dtapTime = 0;
     lights = LIGHT_CHARGES; lightTime = 0;
+    freezes = FREEZE_CHARGES; freezeTime = 0;
+    lastBossLevel = 0;
     arcs.length = 0;
     spawnTimer = 0; dangerTimer = 0; dangerGlow = 0;
     shake = 0; flashOver = 0;
@@ -3432,6 +3605,8 @@
       useAbility('doubleTap');
     } else if (e.key === 'l' || e.key === 'L') {
       useAbility('lightning');
+    } else if (e.key === 'f' || e.key === 'F') {
+      useAbility('freeze');
     }
   });
 
@@ -3473,6 +3648,20 @@
       dtapTime: function () { return dtapTime; },
       lights: function () { return lights; },
       lightTime: function () { return lightTime; },
+      freezes: function () { return freezes; },
+      freezeTime: function () { return freezeTime; },
+      setFreeze: function (v) { freezeTime = v; },
+      setElapsed: function (v) { elapsed = v; },
+      bossHp: bossHp,
+      spawnBoss: spawnBoss,
+      bosses: function () { return circles.filter(function (c) { return c.boss; }); },
+      hpRoll: function (t) {
+        var keep = elapsed; elapsed = t;
+        circles.length = 0; spawnCircle();
+        var hp = circles.length ? circles[0].maxHp : 0;
+        circles.length = 0; elapsed = keep;
+        return hp;
+      },
       touching: touching,
       themes: THEMES,
       openStore: openStore,
