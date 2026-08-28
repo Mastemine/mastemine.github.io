@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b1020">
+<!-- Keep this test build out of search results. This has to stay crawlable
+     to work: a robots.txt Disallow would stop crawlers fetching the page and
+     therefore stop them ever seeing this tag, which is why the game is NOT
+     disallowed there. -->
+<meta name="robots" content="noindex, nofollow">
 <title>Pop! &mdash; Circle Popping Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
