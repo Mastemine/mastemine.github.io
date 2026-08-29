@@ -205,6 +205,7 @@
   .iconbtn:disabled { opacity: .32; cursor: default; }
 
   /* Ability buttons carry a charge badge and an armed state. */
+  #slots { display: contents; }
   .abtn { position: relative; }
   .abtn .charges {
     position: absolute;
@@ -1023,10 +1024,7 @@
     <div class="spacer"></div>
     <span id="combo"></span>
     <div class="stat" style="text-align:right"><span class="label" id="levelLabel">Level</span><span class="value" id="level">1</span></div>
-    <button class="iconbtn abtn" id="freezeBtn" title="Freeze (F)" aria-label="Freeze"></button>
-    <button class="iconbtn abtn" id="lightBtn" title="Lightning Touch (L)" aria-label="Lightning touch"></button>
-    <button class="iconbtn abtn" id="dtapBtn" title="Double Tap (D)" aria-label="Double tap"></button>
-    <button class="iconbtn abtn" id="bombBtn" title="Bomb (B)" aria-label="Arm bomb"></button>
+    <span id="slots"></span>
     <button class="iconbtn" id="soundBtn" title="Sound" aria-label="Toggle sound"></button>
     <button class="iconbtn" id="pauseBtn" title="Pause" aria-label="Pause"></button>
   </div>
@@ -1283,11 +1281,8 @@
   var licenseWrap=document.getElementById('licenseWrap');
   var licenseKey =document.getElementById('licenseKey');
   var toastEl  = document.getElementById('toast');
-  var bombBtn  = document.getElementById('bombBtn');
-  var dtapBtn  = document.getElementById('dtapBtn');
+  var slotsEl  = document.getElementById('slots');
   var buffBar  = document.getElementById('buffBar');
-  var lightBtn = document.getElementById('lightBtn');
-  var freezeBtn= document.getElementById('freezeBtn');
   var pauseBtn = document.getElementById('pauseBtn');
   var soundBtn = document.getElementById('soundBtn');
 
@@ -1456,10 +1451,10 @@
   var circles = [], particles = [], floaters = [];
   var score = 0, best = 0, popped = 0, elapsed = 0;
   var chainVal = 0, chainLen = 0;   // start-number of the live chain, and its length
-  var bombs = 0, armed = null;      // armed ability id, spent on the next tap
-  var dtaps = 0, dtapTime = 0;      // double tap charges, and seconds left on it
-  var lights = 0, lightTime = 0;    // lightning touch charges, and seconds left
-  var freezes = 0, freezeTime = 0;  // freeze charges, and seconds left
+  // Charges and live timers are keyed by ability id rather than living in a
+  // variable each, so the pool can grow without the state growing with it.
+  var charges = {}, timeLeft = {};
+  var armed = null;                 // armed ability id, spent on the next tap
   var lastBossLevel = 0;            // so each boss level spawns exactly one
   var arcs = [];                    // live lightning bolts, purely decorative
   var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
@@ -1791,10 +1786,10 @@
         puzzleWon = false;
         taps = lv.taps;
         buildLevel(lv);
-        bombs = (lv.grants && lv.grants.bomb) || 0;
-        dtaps = (lv.grants && lv.grants.doubleTap) || 0;
-        lights = (lv.grants && lv.grants.lightning) || 0;
-        freezes = 0;                     // nothing moves in Puzzle
+        charges.bomb = (lv.grants && lv.grants.bomb) || 0;
+        charges.doubleTap = (lv.grants && lv.grants.doubleTap) || 0;
+        charges.lightning = (lv.grants && lv.grants.lightning) || 0;
+        charges.freeze = 0;                     // nothing moves in Puzzle
       },
       tick: function () {
         if (puzzleWon) return;
@@ -2143,10 +2138,10 @@
 
     // Snapshot the contacts before anything moves or dies, so the zap hits
     // what was actually touching at the moment of the tap.
-    var contacts = lightTime > 0 ? touching(hit) : null;
+    var contacts = timeLeft.lightning > 0 ? touching(hit) : null;
 
     // A boss only ever comes down one plain tap at a time.
-    hit.hp -= (dtapTime > 0 && !hit.boss ? DTAP_DAMAGE : 1);
+    hit.hp -= (timeLeft.doubleTap > 0 && !hit.boss ? DTAP_DAMAGE : 1);
     hit.flash = 1;
 
     // A tap nudges the circle upward a touch -- feels responsive. Puzzle
@@ -2207,8 +2202,9 @@
   // four, so a hard-won bounty never lands silently on something already full.
   function grantCharge() {
     var pool = [];
-    for (var id in ABILITIES) {
-      var a = ABILITIES[id];
+    for (var si = 0; si < loadout.length; si++) {
+      var id = loadout[si], a = ABILITIES[id];
+      if (!a) continue;
       if (a.needsMotion && !mode.spawns) continue;   // not offered in this mode
       if (a.stock() < MAX_CHARGES) pool.push(id);
     }
@@ -2228,8 +2224,9 @@
   }
 
   function tickCooldowns(dt) {
-    for (var id in ABILITIES) {
-      var a = ABILITIES[id];
+    for (var si = 0; si < loadout.length; si++) {
+      var id = loadout[si], a = ABILITIES[id];
+      if (!a) continue;
 
       // At or above the starting allowance there is nothing to trickle back,
       // so the timer sits at zero rather than banking progress.
@@ -2254,9 +2251,9 @@
 
   // Cheap per-frame paint: only the bar widths, never the whole button state.
   function paintCooldowns() {
-    for (var id in ABILITIES) {
-      var a = ABILITIES[id];
-      if (!a.cd) continue;
+    for (var si = 0; si < loadout.length; si++) {
+      var id = loadout[si], a = ABILITIES[id];
+      if (!a || !a.cd) continue;
       var running = mode.recharges && a.stock() < START_MAX[id] && !a.live();
       a.cd.style.display = running ? 'block' : 'none';
       if (running) a.cdFill.style.width = (cool[id] / COOLDOWN[id] * 100).toFixed(1) + '%';
@@ -2540,8 +2537,8 @@
 
     // Frost: a cold wash, a rime around the edge, and a ring on every
     // circle, so a frozen board reads as frozen and not merely as lag.
-    if (freezeTime > 0) {
-      var fade = Math.min(1, freezeTime / 0.6);       // melt out at the end
+    if (timeLeft.freeze > 0) {
+      var fade = Math.min(1, timeLeft.freeze / 0.6);       // melt out at the end
       var shimmer = 0.5 + 0.5 * Math.sin(chainPulse * 0.8);
 
       ctx.save();
@@ -2599,7 +2596,7 @@
     // Spawn cadence belongs to the mode; Puzzle does not spawn at all, and
     // nothing new drops while the board is frozen. The timer is left alone
     // rather than reset, so the cadence resumes where it left off.
-    if (mode.spawns && freezeTime <= 0) {
+    if (mode.spawns && timeLeft.freeze <= 0) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
         spawnCircle();
@@ -2613,20 +2610,20 @@
     // The buff clock only advances during live play: update() is not called
     // while paused, on the game-over screen, or behind the store.
     var ticked = false;
-    if (dtapTime > 0) {
-      dtapTime = Math.max(0, dtapTime - dt);
+    if (timeLeft.doubleTap > 0) {
+      timeLeft.doubleTap = Math.max(0, timeLeft.doubleTap - dt);
       ticked = true;
-      if (dtapTime === 0) { toast(ABILITIES.doubleTap.done); beep(240, 0.20, 'triangle', 0.06); }
+      if (timeLeft.doubleTap === 0) { toast(ABILITIES.doubleTap.done); beep(240, 0.20, 'triangle', 0.06); }
     }
-    if (lightTime > 0) {
-      lightTime = Math.max(0, lightTime - dt);
+    if (timeLeft.lightning > 0) {
+      timeLeft.lightning = Math.max(0, timeLeft.lightning - dt);
       ticked = true;
-      if (lightTime === 0) { toast(ABILITIES.lightning.done); beep(240, 0.20, 'triangle', 0.06); }
+      if (timeLeft.lightning === 0) { toast(ABILITIES.lightning.done); beep(240, 0.20, 'triangle', 0.06); }
     }
-    if (freezeTime > 0) {
-      freezeTime = Math.max(0, freezeTime - dt);
+    if (timeLeft.freeze > 0) {
+      timeLeft.freeze = Math.max(0, timeLeft.freeze - dt);
       ticked = true;
-      if (freezeTime === 0) { toast(ABILITIES.freeze.done); beep(300, 0.22, 'triangle', 0.06); }
+      if (timeLeft.freeze === 0) { toast(ABILITIES.freeze.done); beep(300, 0.22, 'triangle', 0.06); }
     }
     if (ticked) updateAbilities();
     if (mode.recharges) tickCooldowns(dt);
@@ -2657,7 +2654,7 @@
     // A frozen board cannot get any worse, so the top-out fuse is held too.
     // That is the point of the ability: freezing while buried buys you the
     // 15 seconds to dig out instead of watching the run end anyway.
-    if (topmost <= 0 && mode.topOut !== 'ignore' && freezeTime <= 0) {
+    if (topmost <= 0 && mode.topOut !== 'ignore' && timeLeft.freeze <= 0) {
       dangerTimer += dt;
       if (dangerTimer >= TOP_GRACE) {
         if (mode.topOut === 'time') topOutPenalty(); else endRun('topout');
@@ -2695,7 +2692,7 @@
     lastTime = now;
 
     if (running && !paused && !over) {
-      if (freezeTime > 0) {
+      if (timeLeft.freeze > 0) {
         // Skip the solver entirely rather than zeroing gravity: Verlet holds
         // velocity in the previous position, so not stepping leaves every
         // circle exactly where it is and lets it resume its fall on thaw.
@@ -2734,34 +2731,34 @@
     bomb: {
       name: 'Bomb', kind: 'targeted', icon: 'bomb', el: null, badge: null,
       hint: 'Tap a circle to blast its number',
-      stock: function () { return bombs; },
-      spend: function () { bombs--; },
-      restock: function () { bombs++; },
+      stock: function () { return charges.bomb; },
+      spend: function () { charges.bomb--; },
+      restock: function () { charges.bomb++; },
       live:  function () { return armed === 'bomb'; },
-      label: function () { return bombs; }
+      label: function () { return charges.bomb; }
     },
     doubleTap: {
       name: 'Double Tap', kind: 'timed', icon: 'dtap', el: null, badge: null,
       hint: 'Every tap counts double for ' + DTAP_SECS + 's',
-      stock: function () { return dtaps; },
-      spend: function () { dtaps--; },
-      restock: function () { dtaps++; },
-      live:  function () { return dtapTime > 0; },
-      label: function () { return dtapTime > 0 ? Math.ceil(dtapTime) : dtaps; },
-      start: function () { dtapTime = DTAP_SECS; },
-      secs: DTAP_SECS, time: function () { return dtapTime; }, bar: 'var(--gold)',
+      stock: function () { return charges.doubleTap; },
+      spend: function () { charges.doubleTap--; },
+      restock: function () { charges.doubleTap++; },
+      live:  function () { return timeLeft.doubleTap > 0; },
+      label: function () { return timeLeft.doubleTap > 0 ? Math.ceil(timeLeft.doubleTap) : charges.doubleTap; },
+      start: function () { timeLeft.doubleTap = DTAP_SECS; },
+      secs: DTAP_SECS, time: function () { return timeLeft.doubleTap; }, bar: 'var(--gold)',
       done: 'Double tap over'
     },
     lightning: {
       name: 'Lightning Touch', kind: 'timed', icon: 'bolt', el: null, badge: null,
       hint: 'Taps also zap whatever is touching, for ' + LIGHT_SECS + 's',
-      stock: function () { return lights; },
-      spend: function () { lights--; },
-      restock: function () { lights++; },
-      live:  function () { return lightTime > 0; },
-      label: function () { return lightTime > 0 ? Math.ceil(lightTime) : lights; },
-      start: function () { lightTime = LIGHT_SECS; },
-      secs: LIGHT_SECS, time: function () { return lightTime; }, bar: 'var(--accent)',
+      stock: function () { return charges.lightning; },
+      spend: function () { charges.lightning--; },
+      restock: function () { charges.lightning++; },
+      live:  function () { return timeLeft.lightning > 0; },
+      label: function () { return timeLeft.lightning > 0 ? Math.ceil(timeLeft.lightning) : charges.lightning; },
+      start: function () { timeLeft.lightning = LIGHT_SECS; },
+      secs: LIGHT_SECS, time: function () { return timeLeft.lightning; }, bar: 'var(--accent)',
       done: 'Lightning touch over'
     },
     freeze: {
@@ -2770,21 +2767,25 @@
       // the button is hidden there rather than offered and useless.
       needsMotion: true,
       hint: 'Everything stops for ' + FREEZE_SECS + 's',
-      stock: function () { return freezes; },
-      spend: function () { freezes--; },
-      restock: function () { freezes++; },
-      live:  function () { return freezeTime > 0; },
-      label: function () { return freezeTime > 0 ? Math.ceil(freezeTime) : freezes; },
-      start: function () { freezeTime = FREEZE_SECS; },
-      secs: FREEZE_SECS, time: function () { return freezeTime; }, bar: ICE,
+      stock: function () { return charges.freeze; },
+      spend: function () { charges.freeze--; },
+      restock: function () { charges.freeze++; },
+      live:  function () { return timeLeft.freeze > 0; },
+      label: function () { return timeLeft.freeze > 0 ? Math.ceil(timeLeft.freeze) : charges.freeze; },
+      start: function () { timeLeft.freeze = FREEZE_SECS; },
+      secs: FREEZE_SECS, time: function () { return timeLeft.freeze; }, bar: ICE,
       done: 'Thawed'
     }
   };
 
-  ABILITIES.bomb.el = bombBtn;
-  ABILITIES.doubleTap.el = dtapBtn;
-  ABILITIES.lightning.el = lightBtn;
-  ABILITIES.freeze.el = freezeBtn;
+  // Seed both maps from the table, so adding an ability needs no new state.
+  for (var _aid in ABILITIES) { charges[_aid] = 0; timeLeft[_aid] = 0; }
+
+  // The four the player takes into a run. Buttons are built from this, so the
+  // HUD stays the same size however large the pool grows.
+  var SLOTS = 4;
+  var LOADOUT_KEY = 'popLoadout';
+  var loadout = ['bomb', 'doubleTap', 'lightning', 'freeze'];
 
   function abilityReady(id) {
     var a = ABILITIES[id];
@@ -2795,13 +2796,35 @@
   }
 
   // Icons are stamped once; per-frame updates only touch text and classes.
+  // Builds the HUD from whatever the player is carrying. Called again whenever
+  // the loadout changes, so nothing here may assume a fixed set of abilities.
   function initAbilities() {
-    for (var id in ABILITIES) {
-      var a = ABILITIES[id];
-      a.el.innerHTML = ICON[a.icon] + '<span class="charges"></span>' +
-                       '<span class="cdbar"><i></i></span>';
-      a.badge = a.el.querySelector('.charges');
-      a.cd = a.el.querySelector('.cdbar');
+    var id, a;
+
+    for (id in ABILITIES) {
+      a = ABILITIES[id];
+      a.el = null; a.badge = null; a.cd = null; a.cdFill = null;
+      if (a.lane && a.lane.parentNode) a.lane.parentNode.removeChild(a.lane);
+      a.lane = null; a.fill = null;
+    }
+    slotsEl.innerHTML = '';
+
+    for (var i = 0; i < loadout.length; i++) {
+      id = loadout[i];
+      a = ABILITIES[id];
+      if (!a) continue;
+
+      var btn = document.createElement('button');
+      btn.className = 'iconbtn abtn';
+      btn.title = a.name + ' (' + (i + 1) + ')';
+      btn.setAttribute('aria-label', a.name);
+      btn.innerHTML = ICON[a.icon] + '<span class="charges"></span>' +
+                      '<span class="cdbar"><i></i></span>';
+      slotsEl.appendChild(btn);
+
+      a.el = btn;
+      a.badge = btn.querySelector('.charges');
+      a.cd = btn.querySelector('.cdbar');
       a.cdFill = a.cd.querySelector('i');
 
       // Every timed ability gets its own clock lane, so two can run at once.
@@ -2813,18 +2836,20 @@
         a.lane.appendChild(a.fill);
         buffBar.appendChild(a.lane);
       }
+
       (function (key) {
-        a.el.addEventListener('click', function () {
+        btn.addEventListener('click', function () {
           useAbility(key);
-          ABILITIES[key].el.blur();
+          if (ABILITIES[key].el) ABILITIES[key].el.blur();
         });
       })(id);
     }
   }
 
   function updateAbilities() {
-    for (var id in ABILITIES) {
-      var a = ABILITIES[id];
+    for (var si = 0; si < loadout.length; si++) {
+      var id = loadout[si], a = ABILITIES[id];
+      if (!a || !a.el) continue;
       a.badge.textContent = mode.paysWithTime
         ? (a.live() ? a.label() : ABILITY_SECS[id] + 's')
         : a.label();
@@ -3744,10 +3769,10 @@
     arcs.length = 0;
     score = 0; popped = 0; elapsed = 0;
     chainVal = 0; chainLen = 0;
-    bombs = BOMB_CHARGES; armed = null;
-    dtaps = DTAP_CHARGES; dtapTime = 0;
-    lights = LIGHT_CHARGES; lightTime = 0;
-    freezes = FREEZE_CHARGES; freezeTime = 0;
+    charges.bomb = BOMB_CHARGES; armed = null;
+    charges.doubleTap = DTAP_CHARGES; timeLeft.doubleTap = 0;
+    charges.lightning = LIGHT_CHARGES; timeLeft.lightning = 0;
+    charges.freeze = FREEZE_CHARGES; timeLeft.freeze = 0;
     lastBossLevel = 0;
     for (var ck in cool) cool[ck] = 0;
     arcs.length = 0;
@@ -3954,14 +3979,9 @@
       start();
     } else if ((e.key === 'c' || e.key === 'C') && over) {
       requestContinue();
-    } else if (e.key === 'b' || e.key === 'B') {
-      useAbility('bomb');
-    } else if (e.key === 'd' || e.key === 'D') {
-      useAbility('doubleTap');
-    } else if (e.key === 'l' || e.key === 'L') {
-      useAbility('lightning');
-    } else if (e.key === 'f' || e.key === 'F') {
-      useAbility('freeze');
+    } else if (e.key >= '1' && e.key <= '4') {
+      var slot = loadout[+e.key - 1];
+      if (slot) useAbility(slot);
     }
   });
 
@@ -3998,25 +4018,25 @@
       openSettings: openSettings,
       use: useAbility,
       arm: useAbility,
-      bombs: function () { return bombs; },
+      bombs: function () { return charges.bomb; },
       armed: function () { return armed; },
-      dtaps: function () { return dtaps; },
-      dtapTime: function () { return dtapTime; },
-      lights: function () { return lights; },
-      lightTime: function () { return lightTime; },
-      freezes: function () { return freezes; },
-      freezeTime: function () { return freezeTime; },
-      setFreeze: function (v) { freezeTime = v; },
+      dtaps: function () { return charges.doubleTap; },
+      dtapTime: function () { return timeLeft.doubleTap; },
+      lights: function () { return charges.lightning; },
+      lightTime: function () { return timeLeft.lightning; },
+      freezes: function () { return charges.freeze; },
+      freezeTime: function () { return timeLeft.freeze; },
+      setFreeze: function (v) { timeLeft.freeze = v; },
       setElapsed: function (v) { elapsed = v; },
       bossHp: bossHp,
       charges: function () {
-        return { bomb: bombs, doubleTap: dtaps, lightning: lights, freeze: freezes };
+        return { bomb: charges.bomb, doubleTap: charges.doubleTap, lightning: charges.lightning, freeze: charges.freeze };
       },
       setCharges: function (o) {
-        if ('bomb' in o) bombs = o.bomb;
-        if ('doubleTap' in o) dtaps = o.doubleTap;
-        if ('lightning' in o) lights = o.lightning;
-        if ('freeze' in o) freezes = o.freeze;
+        if ('bomb' in o) charges.bomb = o.bomb;
+        if ('doubleTap' in o) charges.doubleTap = o.doubleTap;
+        if ('lightning' in o) charges.lightning = o.lightning;
+        if ('freeze' in o) charges.freeze = o.freeze;
         updateAbilities();
       },
       maxCharges: MAX_CHARGES,
@@ -4025,9 +4045,9 @@
       startMax: START_MAX,
       setCooldown: function (id, v) { cool[id] = v; },
       setLive: function (id, v) {
-        if (id === 'doubleTap') dtapTime = v;
-        else if (id === 'lightning') lightTime = v;
-        else if (id === 'freeze') freezeTime = v;
+        if (id === 'doubleTap') timeLeft.doubleTap = v;
+        else if (id === 'lightning') timeLeft.lightning = v;
+        else if (id === 'freeze') timeLeft.freeze = v;
       },
       spawnBoss: spawnBoss,
       bosses: function () { return circles.filter(function (c) { return c.boss; }); },
