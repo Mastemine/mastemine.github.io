@@ -1664,6 +1664,7 @@
     slowmo:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8.4" r="5.6"/><path d="M8 5.2v3.4l2.3 1.4"/><path d="M6.1 1.5h3.8"/></svg>',
     lasso: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="6.4" rx="5.4" ry="4.2"/><path d="M8 10.6v3.8" stroke-linecap="round"/></svg>',
     sling: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 13.6 3.2 8.2 12.8 3.4"/><path d="M3.2 8.2 12.8 12"/><circle cx="12.8" cy="7.7" r="2.5" fill="currentColor" stroke="none"/></svg>',
+    eat:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.8" fill="currentColor" stroke="none"/><path d="M8 1.2v2.4M8 12.4v2.4M1.2 8h2.4M12.4 8h2.4"/><path d="M6.6 2.6 8 1.2l1.4 1.4M6.6 13.4 8 14.8l1.4-1.4M2.6 6.6 1.2 8l1.4 1.4M13.4 6.6 14.8 8l-1.4 1.4"/></svg>',
     laser: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M1.6 13.4 13.6 2.2" stroke-width="2.2"/><path d="M11.2 1.4 14.8 1.2l-.2 3.6" stroke-width="1.4"/></svg>',
     charge:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2" opacity=".45"/><circle cx="8" cy="8" r="3.4" fill="currentColor" stroke="none"/></svg>',
     shards:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 4.4 9.7 6.9 8 9.4 6.3 6.9z" fill="currentColor"/><path d="M12.6 2.6 14.2 4M2.2 11.4 3.8 10M13.4 10.6 14.6 12.4M1.6 4.6 3 3" stroke-linecap="round"/><path d="M7.1 12.2 8 13.9l.9-1.7z" fill="currentColor"/></svg>',
@@ -1763,7 +1764,7 @@
                        split: 10, overload: 25, sweep: 20, wildcard: 20,
                        slowmo: 15, fire: 25, secondWind: 40,
                        lasso: 20, slingshot: 12, laser: 15, charge: 15,
-                       metronome: 20, echo: 30, iceShards: 25 };
+                       metronome: 20, echo: 30, iceShards: 25, consume: 15 };
 
   // Chain scoring: pop circles that STARTED on the same number back to
   // back and each one is worth a little more. A circle's start value is
@@ -1793,7 +1794,7 @@
                    split: 50, overload: 150, sweep: 90, wildcard: 150,
                    slowmo: 100, fire: 60,
                    lasso: 110, slingshot: 55, laser: 70, charge: 65,
-                   metronome: 140, echo: 200, iceShards: 90 };
+                   metronome: 140, echo: 200, iceShards: 90, consume: 80 };
 
   // Lifetime score needed to unlock each ability. The starting four are 0.
   // Second Wind sits far out on its own: one use per run, never refilled.
@@ -1801,23 +1802,34 @@
     bomb: 0, doubleTap: 0, lightning: 0, freeze: 0,
     split: 30000, sweep: 80000, laser: 120000, overload: 160000,
     charge: 200000, wildcard: 280000, slingshot: 350000, slowmo: 450000,
-    lasso: 550000, fire: 700000, metronome: 850000, iceShards: 1000000,
-    echo: 1200000, secondWind: 2000000
+    lasso: 550000, consume: 620000, fire: 700000, metronome: 850000,
+    iceShards: 1000000, echo: 1200000, secondWind: 2000000
   };
 
   // Fire: the only ability driven by dragging rather than tapping. Holding
   // and moving lays down patches of flame that outlive the drag and burn
   // whatever sits in them.
   // Lasso: trace a loop, everything enclosed dies if their total is in budget.
-  var LASSO_BUDGET = 14;
+  var LASSO_BUDGET = 25;
   var LASSO_MIN_POINTS = 8;
   var LASSO_STEP = 9;         // px between recorded points
 
   // Slingshot: drag back from a circle, release to fire it.
   var SLING_POWER = 0.075;    // drag pixels -> launch velocity
   var SLING_MAX = 9;          // velocity ceiling, px per step
-  var SLING_LIFE = 1.2;       // seconds it stays a projectile
-  var SLING_DAMAGE = 1;
+  var SLING_LIFE = 1.4;       // seconds it stays a projectile
+  // A shot deals its OWN number, so which circle you load matters more than
+  // how hard you pull. It ploughs rather than stopping on first contact:
+  // its velocity is re-asserted every physics step, and what it meets is
+  // shoved aside along the line of travel.
+  var SLING_PUSH = 9;         // shove given to whatever it barges through
+  var SLING_DRAG = 0.985;     // speed kept per step, so it eventually settles
+
+  // Consume: the same throw, but it swallows what it meets instead of
+  // damaging it, adding each victim's number to its own and keeping its
+  // size. Clears a lot of board for one circle -- which is then a very
+  // large circle, and still has to be tapped out.
+  var CONSUME_LIFE = 1.4;
 
   // Laser: a straight cut, resolved on release.
   // A press-and-release shorter than this is a fumbled tap, not a drag,
@@ -1855,7 +1867,7 @@
   // shards that ice and damage whatever they reach, and popping THOSE
   // throws six more. The cascade is paced by shard travel time, so the only
   // brake it needs is a ceiling on how many can be in the air at once.
-  var SHARD_SECS = 15;        // how long a circle stays iced
+  var SHARD_SECS = 5;         // how long a circle stays iced
   var SHARD_COUNT = 6;        // shards thrown by a shattering circle
   var SHARD_SPEED = 5.2;      // px per frame
   var SHARD_LIFE = 1.1;       // seconds before a shard melts
@@ -1879,7 +1891,7 @@
   var OVERLOAD_MAX_CASCADE = 400;   // hard stop; the cascade is a queue, not recursion
   var SWEEP_BAND = 1.6;       // multiples of the largest radius, measured off the floor
   var WILDCARD_SECS = 20;
-  var SLOWMO_SECS = 30;
+  var SLOWMO_SECS = 12;
   var SLOWMO_SCALE = 0.5;
 
   var BOMB_CHARGES = 3;       // per run
@@ -1908,7 +1920,7 @@
                     split: 2, overload: 2, sweep: 2,
                     wildcard: 2, slowmo: 2, fire: FIRE_CHARGES, secondWind: 1,
                     lasso: 2, slingshot: 3, laser: 3, charge: 2,
-                    metronome: 2, echo: 1, iceShards: 2 };
+                    metronome: 2, echo: 1, iceShards: 2, consume: 2 };
   var DTAP_SECS = 30;         // how long double tap lasts
   var DTAP_DAMAGE = 2;        // points knocked off per tap while it runs
   var BOMB_STEP = 0.15;       // bonus per extra circle caught in one blast
@@ -2474,8 +2486,11 @@
 
     // Lasso. Two clumps: the right one is inside the budget as drawn, the
     // left is one over. Tapping a single circle down closes the gap.
+    // Retuned when the budget went to 25 -- at the old numbers the whole
+    // board came to less than one loop could hold, and a level about
+    // judging a budget has to have something that does not fit.
     { id: 'l15', name: 'Round Up', taps: 4, grants: { lasso: 2 },
-      rows: ['33333.333'], stars: [3, 2] },
+      rows: ['55556..5555'], stars: [3, 2] },
 
     // Charge Shot. Two nines are more than any tap budget can reach, but a
     // hold does not spend taps at all -- only patience. The third is left
@@ -2728,6 +2743,7 @@
       if (c.flash > 0) c.flash = Math.max(0, c.flash - 0.09);
     }
     pinIced();
+    driveSling();
 
     // Relaxation: separate overlaps, then re-apply the container.
     for (var pass = 0; pass < ITERATIONS; pass++) {
@@ -2771,8 +2787,10 @@
       // sides of an overlap, so an icicle shoved during pass 1 has to be
       // back in place before pass 2 measures anything against it. Its
       // neighbours keep the separation they were given, which is what makes
-      // an icicle a fixed obstacle rather than a heavy one.
+      // an icicle a fixed obstacle rather than a heavy one. A live shot is
+      // held to its velocity in the same place and for the same reason.
       pinIced();
+      driveSling();
     }
   }
 
@@ -3480,7 +3498,7 @@
 
   function resolveVector(g) {
     var id = armed;
-    if (id !== 'slingshot' && id !== 'laser') return;
+    if (id !== 'slingshot' && id !== 'laser' && id !== 'consume') return;
 
     var dx = g.x - g.x0, dy = g.y - g.y0;
     var len = Math.sqrt(dx * dx + dy * dy);
@@ -3491,7 +3509,7 @@
     }
 
     if (id === 'laser') { fireLaser(g.x0, g.y0, g.x, g.y); return; }
-    launchSling(g, dx, dy, len);
+    launchSling(g, dx, dy, len, id);
   }
 
   function fireLaser(x1, y1, x2, y2) {
@@ -3523,48 +3541,87 @@
   // Drag BACK from a circle and let go: it flies the other way, like a
   // catapult. It stays on the board afterwards -- it is ammunition, not
   // removal, and that is the whole trade.
-  function launchSling(g, dx, dy, len) {
+  // Both throws launch the same way and fly the same way; they differ only
+  // in what happens to what they meet, which updateSling() reads off `eats`.
+  function launchSling(g, dx, dy, len, id) {
+    var eats = id === 'consume';
     var c = circleAt(g.x0, g.y0);
     if (!c) {
       toast('Start the drag on a circle');
-      refund('slingshot'); armed = null; updateAbilities();
+      refund(id); armed = null; updateAbilities();
       return;
     }
     if (c.boss) {
       deflect(c);
       toast('Bosses are too heavy');
-      refund('slingshot'); armed = null; updateAbilities();
+      refund(id); armed = null; updateAbilities();
       return;
     }
 
     var speed = Math.min(SLING_MAX, len * SLING_POWER);
-    // Launch away from the drag, and remember: Verlet keeps velocity in the
-    // previous position, so the shot is fired by moving `px`/`py`, not by
-    // storing a vx anywhere.
+    // Launch away from the drag. Verlet keeps velocity in the previous
+    // position, so the shot is fired by moving `px`/`py` -- but the velocity
+    // is ALSO kept on the circle, because the solver would otherwise stop it
+    // dead against the first thing it met. driveSling() puts it back every
+    // step, which is what makes it plough instead of bounce.
     var ux = -dx / len, uy = -dy / len;
-    c.px = c.x - ux * speed;
-    c.py = c.y - uy * speed;
-    c.sling = SLING_LIFE;
+    c.svx = ux * speed;
+    c.svy = uy * speed;
+    c.px = c.x - c.svx;
+    c.py = c.y - c.svy;
+    c.sling = eats ? CONSUME_LIFE : SLING_LIFE;
+    c.eats = eats;
     c.slingHits = [];
     c.flash = 1;
 
     armed = null;
     updateAbilities();
-    toast('Fired');
-    beep(300, 0.09, 'square', 0.07);
-    setTimeout(function () { beep(190, 0.14, 'square', 0.05); }, 70);
+    toast(eats ? 'Swallowing' : 'Fired');
+    beep(eats ? 220 : 300, 0.09, 'square', 0.07);
+    setTimeout(function () { beep(eats ? 140 : 190, 0.14, 'square', 0.05); }, 70);
   }
 
-  // A live projectile damages what it runs into, each victim once, for as
-  // long as its fuse lasts. Once per victim and not once per frame, or a
-  // shot that came to rest against a pile would grind it away.
+  // Holds a shot to its launch velocity while the fuse burns. Called from
+  // physicsStep alongside the ice pins: the relaxation solver moves both
+  // sides of an overlap, so without this the first circle the shot met would
+  // stop it, which is the opposite of what a slingshot is for. Position is
+  // left as the solver found it -- only the velocity is restored -- so it
+  // gets jostled off line without being halted.
+  // Strictly idempotent: this runs once after integration and again after
+  // every relaxation pass, six times per physics step. Anything that
+  // ACCUMULATES here gets applied six times over -- which is exactly how the
+  // drag first ended up killing a shot inside forty pixels. The decay lives
+  // in updateSling(), once a frame, scaled by dt.
+  function driveSling() {
+    for (var i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      if (!(c.sling > 0)) continue;
+      c.px = c.x - c.svx;
+      c.py = c.y - c.svy;
+    }
+  }
+
+  // A live shot barges through the pile, shoving what it meets aside and
+  // dealing its OWN number in damage -- so which circle you load is the
+  // decision, not how hard you pull. Each victim is hit once and not once
+  // per frame, or a shot resting against a pile would grind it away.
   function updateSling(dt) {
     for (var i = circles.length - 1; i >= 0; i--) {
       var p = circles[i];
       if (!(p.sling > 0)) continue;
 
       p.sling -= dt;
-      if (p.sling <= 0) { p.sling = 0; p.slingHits = null; continue; }
+      if (p.sling <= 0) {
+        p.sling = 0; p.slingHits = null; p.eats = false; p.svx = p.svy = 0;
+        continue;
+      }
+
+      // Bleeds off once a frame, not once per solver pass. SLING_DRAG is
+      // per physics step, so it is raised to however many steps this frame
+      // covered rather than applied flat.
+      var keep = Math.pow(SLING_DRAG, dt * 60);
+      p.svx *= keep;
+      p.svy *= keep;
 
       var contacts = touching(p);
       for (var j = 0; j < contacts.length; j++) {
@@ -3573,10 +3630,21 @@
         p.slingHits.push(n);
         if (n.boss) { deflect(n); continue; }
 
-        n.hp -= SLING_DAMAGE;
+        if (p.eats) { swallow(p, n); continue; }
+
+        // Shoved along the line of travel, with a sideways component so a
+        // head-on hit is barged out of the way rather than run over in
+        // place. Added to whatever it was already doing: velocity lives in
+        // the previous position.
+        var dx = n.x - p.x, dy = n.y - p.y;
+        var d = Math.sqrt(dx * dx + dy * dy) || 1;
+        n.px -= (p.svx * 0.6 + (dx / d) * SLING_PUSH * 0.5);
+        n.py -= (p.svy * 0.6 + (dy / d) * SLING_PUSH * 0.5);
+
+        n.hp -= Math.max(1, p.hp);        // its own number, whatever it shows
         n.flash = 1;
         if (n.hp > 0) {
-          burst(n.x, n.y, n.r * 0.45, hpColor(n.hp), 4);
+          burst(n.x, n.y, n.r * 0.45, hpColor(n.hp), 5);
         } else {
           var idx = circles.indexOf(n);
           if (idx >= 0) circles.splice(idx, 1);
@@ -3584,6 +3652,25 @@
         }
       }
     }
+  }
+
+  // Absorbed, not popped: the victim's number is added to the shot rather
+  // than scored. Scoring here would pay twice for the same circle, since
+  // popping the swollen one already pays on its grown number -- and the
+  // whole trade is that you are deferring the work, not skipping it.
+  // The radius deliberately does not change: it clears a lot of board for
+  // the space of one circle, and that one circle is now very large.
+  function swallow(p, n) {
+    var idx = circles.indexOf(n);
+    if (idx >= 0) circles.splice(idx, 1);
+
+    p.hp += n.hp;
+    p.maxHp += n.hp;
+    p.flash = 1;
+
+    floatText(p.x, p.y - p.r - 10, '+' + n.hp, ICE);
+    burst(n.x, n.y, n.r * 0.6, hpColor(n.maxHp), 8);
+    beep(150 + Math.min(600, p.hp * 12), 0.07, 'sine', 0.06);
   }
 
   // ---- Charge Shot ----------------------------------------------------
@@ -4214,7 +4301,7 @@
 
   function gestureKind() {
     if (armed === 'lasso') return 'lasso';
-    if (armed === 'slingshot' || armed === 'laser') return 'vector';
+    if (armed === 'slingshot' || armed === 'laser' || armed === 'consume') return 'vector';
     if (armed === 'charge') return 'hold';
     return 'tap';
   }
@@ -4431,7 +4518,10 @@
     for (i = 0; i < circles.length; i++) {
       var ic = circles[i];
       if (!(ic.iced > 0)) continue;
-      var melt = Math.min(1, ic.iced / 1.2);        // thaws out over the last beat
+      // Thaws out over the last moment. Kept short relative to SHARD_SECS,
+      // or a five-second freeze would look like it is already melting for
+      // a quarter of its life.
+      var melt = Math.min(1, ic.iced / 0.7);
       ctx.save();
       ctx.globalAlpha = melt;
       ctx.beginPath();
@@ -4983,7 +5073,13 @@
       name: 'Slingshot', kind: 'targeted', icon: 'sling', el: null, badge: null,
       needsMotion: true,
       input: 'Drag back and release',
-      hint: 'Drag back from a circle and let go to fire it'
+      hint: 'Drag back from a circle and let go \u2014 it hits for its own number'
+    },
+    consume: {
+      name: 'Consume', kind: 'targeted', icon: 'eat', el: null, badge: null,
+      needsMotion: true,
+      input: 'Drag back and release',
+      hint: 'Drag back to throw \u2014 it swallows what it touches'
     },
     laser: {
       name: 'Laser Cut', kind: 'targeted', icon: 'laser', el: null, badge: null,
@@ -6025,8 +6121,18 @@
            'their numbers add up to ' + LASSO_BUDGET + ' or less \u2014 get ' +
            'greedy and nothing happens.',
     slingshot: 'Drag back from a circle and release to fire it across the ' +
-               'board. It damages whatever it hits on the way, then settles ' +
-               'wherever it lands.',
+               'board. It ploughs straight through the pile, shoving circles ' +
+               'out of its way, and deals its OWN number in damage to each ' +
+               'one it barges into \u2014 so a big circle is heavy ammunition. ' +
+               'It settles wherever it ends up, still yours to pop.',
+    consume: 'Thrown the same way as a Slingshot, but it eats rather than ' +
+             'hits: every circle it touches is swallowed whole and its ' +
+             'number added to the shot, which stays exactly the same size. ' +
+             'Launch a 10 through two 5s and you are left with a single 20 ' +
+             'where three circles were. It clears a great deal of board for ' +
+             'the space of one circle \u2014 and that circle still has to be ' +
+             'tapped out, so you are deferring the work, not skipping it. ' +
+             'Bosses are too heavy to swallow.',
     laser: 'Drag a straight line. Everything the line crosses takes ' +
            LASER_DAMAGE + ' at once, however far apart they are.',
     charge: 'Press and hold on one circle to burn it down continuously. The ' +
