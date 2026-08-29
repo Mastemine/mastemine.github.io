@@ -1534,6 +1534,12 @@
     sweep: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3.2v4.2M8 2.4v5M13 3.2v4.2"/><path d="M2 10.4h12"/><path d="M4.4 13.4h7.2"/></svg>',
     wildcard:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="m8 1.3 1.72 3.9 4.24.4-3.2 2.82.95 4.16L8 10.42 4.29 12.58l.95-4.16-3.2-2.82 4.24-.4z"/></svg>',
     slowmo:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8.4" r="5.6"/><path d="M8 5.2v3.4l2.3 1.4"/><path d="M6.1 1.5h3.8"/></svg>',
+    lasso: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="6.4" rx="5.4" ry="4.2"/><path d="M8 10.6v3.8" stroke-linecap="round"/></svg>',
+    sling: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 13.6 3.2 8.2 12.8 3.4"/><path d="M3.2 8.2 12.8 12"/><circle cx="12.8" cy="7.7" r="2.5" fill="currentColor" stroke="none"/></svg>',
+    laser: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M1.6 13.4 13.6 2.2" stroke-width="2.2"/><path d="M11.2 1.4 14.8 1.2l-.2 3.6" stroke-width="1.4"/></svg>',
+    charge:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2" opacity=".45"/><circle cx="8" cy="8" r="3.4" fill="currentColor" stroke="none"/></svg>',
+    metro: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M6 1.8h4l2.6 12.4H3.4z"/><path d="M10.8 4.6 5.4 10.4" stroke-linecap="round"/></svg>',
+    echo:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5.4 4.6a4.8 4.8 0 0 1 0 6.8M8.6 2.4a8 8 0 0 1 0 11.2"/><circle cx="2.6" cy="8" r="1.4" fill="currentColor" stroke="none"/></svg>',
     fire:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8.6 1.1c.2 2 .9 2.9 1.9 4 1.1 1.2 2.1 2.4 2.1 4.3a4.6 4.6 0 0 1-9.2 0c0-1.4.5-2.3 1.3-3.2.1 1 .7 1.7 1.4 1.7.9 0 1.4-.9 1.2-2.3-.2-1.7 0-3.3 1.3-4.5z"/></svg>',
     second:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 8a5.4 5.4 0 1 1-1.7-3.9"/><path d="M13.6 1.9v3.4h-3.4"/></svg>',
     freeze:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.4v13.2M2.28 4.7l11.44 6.6M2.28 11.3l11.44-6.6"/><path d="M6.3 3.1 8 4.8l1.7-1.7M6.3 12.9 8 11.2l1.7 1.7"/></svg>',
@@ -1626,7 +1632,9 @@
   // time. Endless and Puzzle keep counted charges instead.
   var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 30, freeze: 15,
                        split: 10, overload: 25, sweep: 20, wildcard: 20,
-                       slowmo: 15, fire: 25, secondWind: 40 };
+                       slowmo: 15, fire: 25, secondWind: 40,
+                       lasso: 20, slingshot: 12, laser: 15, charge: 15,
+                       metronome: 20, echo: 30 };
 
   // Chain scoring: pop circles that STARTED on the same number back to
   // back and each one is worth a little more. A circle's start value is
@@ -1650,19 +1658,49 @@
   // Second Wind is absent on purpose -- it never recharges. See noRefill.
   var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 180,
                    split: 50, overload: 150, sweep: 90, wildcard: 150,
-                   slowmo: 100, fire: 60 };
+                   slowmo: 100, fire: 60,
+                   lasso: 110, slingshot: 55, laser: 70, charge: 65,
+                   metronome: 140, echo: 200 };
 
   // Lifetime score needed to unlock each ability. The starting four are 0.
   // Second Wind sits far out on its own: one use per run, never refilled.
   var UNLOCK_AT = {
     bomb: 0, doubleTap: 0, lightning: 0, freeze: 0,
-    split: 30000, sweep: 80000, overload: 160000,
-    wildcard: 280000, slowmo: 450000, fire: 700000, secondWind: 2000000
+    split: 30000, sweep: 80000, laser: 120000, overload: 160000,
+    charge: 200000, wildcard: 280000, slingshot: 350000, slowmo: 450000,
+    lasso: 550000, fire: 700000, metronome: 850000, echo: 1200000,
+    secondWind: 2000000
   };
 
   // Fire: the only ability driven by dragging rather than tapping. Holding
   // and moving lays down patches of flame that outlive the drag and burn
   // whatever sits in them.
+  // Lasso: trace a loop, everything enclosed dies if their total is in budget.
+  var LASSO_BUDGET = 14;
+  var LASSO_MIN_POINTS = 8;
+  var LASSO_STEP = 9;         // px between recorded points
+
+  // Slingshot: drag back from a circle, release to fire it.
+  var SLING_POWER = 0.075;    // drag pixels -> launch velocity
+  var SLING_MAX = 9;          // velocity ceiling, px per step
+  var SLING_LIFE = 1.2;       // seconds it stays a projectile
+  var SLING_DAMAGE = 1;
+
+  // Laser: a straight cut, resolved on release.
+  // A press-and-release shorter than this is a fumbled tap, not a drag,
+  // and is given back rather than resolved against nothing.
+  var VECTOR_MIN = 24;       // px of drag before a vector ability resolves
+
+  var LASER_WIDTH = 12;
+  var LASER_DAMAGE = 2;
+
+  // Charge: hold on one circle, damage accrues.
+  var CHARGE_DPS = 2.2;
+  var CHARGE_MAX = 5;         // seconds before the hold ends itself
+
+  var METRO_SECS = 25;
+  var METRO_WINDOW = 0.14;    // seconds either side of the beat that counts
+
   var FIRE_SECS = 10;         // how long you may paint for
   var FIRE_CHARGES = 3;
   var FIRE_NODE_LIFE = 3;     // seconds a patch keeps burning after you leave
@@ -1702,7 +1740,9 @@
   var START_MAX = { bomb: BOMB_CHARGES, doubleTap: DTAP_CHARGES,
                     lightning: LIGHT_CHARGES, freeze: FREEZE_CHARGES,
                     split: 2, overload: 2, sweep: 2,
-                    wildcard: 2, slowmo: 2, fire: FIRE_CHARGES, secondWind: 1 };
+                    wildcard: 2, slowmo: 2, fire: FIRE_CHARGES, secondWind: 1,
+                    lasso: 2, slingshot: 3, laser: 3, charge: 2,
+                    metronome: 2, echo: 1 };
   var DTAP_SECS = 30;         // how long double tap lasts
   var DTAP_DAMAGE = 2;        // points knocked off per tap while it runs
   var BOMB_STEP = 0.15;       // bonus per extra circle caught in one blast
@@ -2460,6 +2500,10 @@
       arcs[i].life -= 0.055;
       if (arcs[i].life <= 0) arcs.splice(i, 1);
     }
+    for (i = beams.length - 1; i >= 0; i--) {
+      beams[i].life -= 0.05;
+      if (beams[i].life <= 0) beams.splice(i, 1);
+    }
     chainPulse += 0.075;
     if (shake > 0) shake = Math.max(0, shake - 0.7);
     if (flashOver > 0) flashOver = Math.max(0, flashOver - 0.02);
@@ -2498,8 +2542,17 @@
     var contacts = timeLeft.lightning > 0 ? touching(hit) : null;
 
     // A boss only ever comes down one plain tap at a time.
-    hit.hp -= (timeLeft.doubleTap > 0 && !hit.boss ? DTAP_DAMAGE : 1);
+    var dmg = 1, onTime = false;
+    if (!hit.boss) {
+      if (timeLeft.doubleTap > 0) dmg = DTAP_DAMAGE;
+      if (timeLeft.metronome > 0 && onBeat()) { dmg *= 2; onTime = true; }
+    }
+    hit.hp -= dmg;
     hit.flash = 1;
+    if (onTime) {
+      floatText(hit.x, hit.y - hit.r - 10, 'ON BEAT', activeTheme.gold);
+      burst(hit.x, hit.y, hit.r * 0.7, activeTheme.gold, 6);
+    }
 
     // A tap nudges the circle upward a touch -- feels responsive. Puzzle
     // suppresses it so an authored board never drifts out of shape.
@@ -2826,6 +2879,334 @@
     setTimeout(function () { beep(840, 0.18, 'sine', 0.08); }, 100);
   }
 
+  // ---- Lasso ----------------------------------------------------------
+  // Trace a loop; on release the loop is closed and every circle whose
+  // centre falls inside it is tested against one shared budget. Enclosing
+  // more than the budget is a miss, not a partial hit -- the decision the
+  // ability asks for is "can I fit this many in", so a near-miss has to
+  // cost something.
+  var lassoPath = [];
+
+  function addLassoPoint(x, y) {
+    var last = lassoPath[lassoPath.length - 1];
+    if (last) {
+      var dx = x - last.x, dy = y - last.y;
+      if (dx * dx + dy * dy < LASSO_STEP * LASSO_STEP) return;
+    }
+    if (lassoPath.length > 400) lassoPath.shift();
+    lassoPath.push({ x: x, y: y });
+  }
+
+  // Ray cast: count the crossings of a horizontal ray to the left. The path
+  // is treated as closed whether or not the player brought it back round,
+  // which is what makes a hurried loop still readable.
+  function insideLoop(path, x, y) {
+    var inside = false;
+    for (var i = 0, j = path.length - 1; i < path.length; j = i++) {
+      var xi = path[i].x, yi = path[i].y, xj = path[j].x, yj = path[j].y;
+      if ((yi > y) !== (yj > y) &&
+          x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  function closeLasso() {
+    var path = lassoPath;
+    lassoPath = [];
+    if (armed !== 'lasso') return;
+
+    // A stab or a short scribble is a fumble, not a cast. Give it back
+    // rather than silently eating the charge.
+    if (path.length < LASSO_MIN_POINTS) {
+      toast('Draw a loop, not a line');
+      refund('lasso'); armed = null; updateAbilities();
+      return;
+    }
+
+    var caught = [], total = 0, i;
+    for (i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      if (!insideLoop(path, c.x, c.y)) continue;
+      if (c.boss) { deflect(c); continue; }      // bosses shrug it off
+      caught.push(c);
+      total += c.hp;
+    }
+
+    if (!caught.length) {
+      toast('Nothing in the loop');
+      refund('lasso'); armed = null; updateAbilities();
+      return;
+    }
+    if (total > LASSO_BUDGET) {
+      // Say by how much: the budget is only interesting if you can learn
+      // to judge it, and that needs the number.
+      for (i = 0; i < caught.length; i++) deflect(caught[i]);
+      toast('Too heavy — ' + total + ' of ' + LASSO_BUDGET + ', over by ' +
+            (total - LASSO_BUDGET));
+      refund('lasso'); armed = null; updateAbilities();
+      beep(150, 0.18, 'square', 0.06);
+      return;
+    }
+
+    for (i = caught.length - 1; i >= 0; i--) {
+      var idx = circles.indexOf(caught[i]);
+      if (idx < 0) continue;
+      circles.splice(idx, 1);
+      awardPop(caught[i], false);          // roped, not tapped: no chain
+    }
+    shake = Math.min(11, 3 + caught.length * 0.8);
+    toast('Roped ' + caught.length + '  (' + total + '/' + LASSO_BUDGET + ')');
+    armed = null;
+    updateAbilities();
+    beep(480, 0.10, 'sine', 0.08);
+    setTimeout(function () { beep(720, 0.16, 'sine', 0.07); }, 80);
+  }
+
+  // ---- Slingshot and Laser Cut ----------------------------------------
+  // Both are press-drag-release, so they share one resolver and split on
+  // which one is armed.
+  var beams = [];            // decaying laser cuts, purely decorative
+
+  function circleAt(x, y) {
+    var hit = null, hitD = Infinity;
+    for (var i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      var dx = x - c.x, dy = y - c.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d <= c.r + 10 && d < hitD) { hitD = d; hit = c; }
+    }
+    return hit;
+  }
+
+  // Shortest distance from a point to a line segment.
+  function segDist(px, py, x1, y1, x2, y2) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var len2 = dx * dx + dy * dy;
+    var t = len2 ? clamp(((px - x1) * dx + (py - y1) * dy) / len2, 0, 1) : 0;
+    var qx = x1 + dx * t, qy = y1 + dy * t;
+    return Math.sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
+  }
+
+  function resolveVector(g) {
+    var id = armed;
+    if (id !== 'slingshot' && id !== 'laser') return;
+
+    var dx = g.x - g.x0, dy = g.y - g.y0;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len < VECTOR_MIN) {
+      toast(id === 'laser' ? 'Drag a line to cut' : 'Drag back to load');
+      refund(id); armed = null; updateAbilities();
+      return;
+    }
+
+    if (id === 'laser') { fireLaser(g.x0, g.y0, g.x, g.y); return; }
+    launchSling(g, dx, dy, len);
+  }
+
+  function fireLaser(x1, y1, x2, y2) {
+    var cut = 0, i;
+    for (i = circles.length - 1; i >= 0; i--) {
+      var c = circles[i];
+      if (segDist(c.x, c.y, x1, y1, x2, y2) > c.r + LASER_WIDTH) continue;
+      if (c.boss) { deflect(c); continue; }
+
+      c.hp -= LASER_DAMAGE;
+      c.flash = 1;
+      cut++;
+      if (c.hp > 0) {
+        burst(c.x, c.y, c.r * 0.5, activeTheme.accent, 5);
+      } else {
+        circles.splice(i, 1);
+        awardPop(c, false);
+      }
+    }
+
+    beams.push({ x1: x1, y1: y1, x2: x2, y2: y2, life: 1 });
+    armed = null;
+    updateAbilities();
+    if (!cut) toast('Cut nothing');
+    else { shake = Math.min(9, 2 + cut * 0.7); toast('Cut ' + cut); }
+    beep(cut ? 660 : 180, 0.14, 'sawtooth', 0.07);
+  }
+
+  // Drag BACK from a circle and let go: it flies the other way, like a
+  // catapult. It stays on the board afterwards -- it is ammunition, not
+  // removal, and that is the whole trade.
+  function launchSling(g, dx, dy, len) {
+    var c = circleAt(g.x0, g.y0);
+    if (!c) {
+      toast('Start the drag on a circle');
+      refund('slingshot'); armed = null; updateAbilities();
+      return;
+    }
+    if (c.boss) {
+      deflect(c);
+      toast('Bosses are too heavy');
+      refund('slingshot'); armed = null; updateAbilities();
+      return;
+    }
+
+    var speed = Math.min(SLING_MAX, len * SLING_POWER);
+    // Launch away from the drag, and remember: Verlet keeps velocity in the
+    // previous position, so the shot is fired by moving `px`/`py`, not by
+    // storing a vx anywhere.
+    var ux = -dx / len, uy = -dy / len;
+    c.px = c.x - ux * speed;
+    c.py = c.y - uy * speed;
+    c.sling = SLING_LIFE;
+    c.slingHits = [];
+    c.flash = 1;
+
+    armed = null;
+    updateAbilities();
+    toast('Fired');
+    beep(300, 0.09, 'square', 0.07);
+    setTimeout(function () { beep(190, 0.14, 'square', 0.05); }, 70);
+  }
+
+  // A live projectile damages what it runs into, each victim once, for as
+  // long as its fuse lasts. Once per victim and not once per frame, or a
+  // shot that came to rest against a pile would grind it away.
+  function updateSling(dt) {
+    for (var i = circles.length - 1; i >= 0; i--) {
+      var p = circles[i];
+      if (!(p.sling > 0)) continue;
+
+      p.sling -= dt;
+      if (p.sling <= 0) { p.sling = 0; p.slingHits = null; continue; }
+
+      var contacts = touching(p);
+      for (var j = 0; j < contacts.length; j++) {
+        var n = contacts[j];
+        if (p.slingHits.indexOf(n) >= 0) continue;
+        p.slingHits.push(n);
+        if (n.boss) { deflect(n); continue; }
+
+        n.hp -= SLING_DAMAGE;
+        n.flash = 1;
+        if (n.hp > 0) {
+          burst(n.x, n.y, n.r * 0.45, hpColor(n.hp), 4);
+        } else {
+          var idx = circles.indexOf(n);
+          if (idx >= 0) circles.splice(idx, 1);
+          awardPop(n, false);
+        }
+      }
+    }
+  }
+
+  // ---- Charge Shot ----------------------------------------------------
+  // Hold on one circle and damage accrues while you commit to it. The board
+  // keeps falling the whole time, which is the cost.
+  var hold = null;           // { c, t, acc }
+
+  function beginHold(x, y) {
+    if (armed !== 'charge') return;
+    var c = circleAt(x, y);
+    // Holding on empty space is a miss, not a spend: stay armed and let
+    // them try again.
+    if (!c) return;
+    if (c.boss) {
+      deflect(c);
+      toast('Bosses are immune');
+      refund('charge'); armed = null; updateAbilities();
+      return;
+    }
+    hold = { c: c, t: 0, acc: 0 };
+    armed = null;            // paid and committed the moment the hold lands
+    updateAbilities();
+    beep(200, 0.08, 'sine', 0.05);
+  }
+
+  function endHold() {
+    if (!hold) return;
+    hold = null;
+  }
+
+  function updateHold(dt) {
+    if (!hold) return;
+    var c = hold.c;
+
+    // The target may have died, or been popped out from under the hold.
+    if (circles.indexOf(c) < 0) { hold = null; return; }
+
+    hold.t += dt;
+    hold.acc += dt * CHARGE_DPS;
+
+    while (hold.acc >= 1) {
+      hold.acc -= 1;
+      c.hp -= 1;
+      c.flash = 1;
+      if (c.hp > 0) {
+        burst(c.x, c.y, c.r * 0.4, activeTheme.accent, 4);
+        beep(300 + (c.maxHp - c.hp) * 40, 0.05, 'sine', 0.05);
+      } else {
+        var idx = circles.indexOf(c);
+        if (idx >= 0) circles.splice(idx, 1);
+        awardPop(c, false);
+        beep(620, 0.13, 'sine', 0.09);
+        hold = null;
+        return;
+      }
+    }
+
+    if (hold.t >= CHARGE_MAX) { hold = null; toast('Charge spent'); }
+  }
+
+  // ---- Metronome ------------------------------------------------------
+  // The beat has to be readable with the sound off, so this clock is its
+  // own: advanced from dt and the same BPM the audio scheduler reads, never
+  // from audioCtx.currentTime, which does not exist until a gesture unlocks
+  // audio and stops mattering the moment the player mutes.
+  var beatPhase = 0;
+
+  // Signed distance to the nearest beat, in beats. With the music actually
+  // playing the phase comes off the audio clock, so the ability is in step
+  // with what the player HEARS rather than merely with the same tempo --
+  // the scheduler runs a lookahead, so the sounding step is musicStep minus
+  // however much of it is still queued. Muted, or before a gesture unlocks
+  // audio, the free-running clock takes over and the ability still works.
+  function beatFrac() {
+    var beats;
+    if (musicPlaying && audioCtx) {
+      var ahead = (musicNextTime - audioCtx.currentTime) / stepDur();
+      beats = (musicStep - ahead) / 4;          // four sixteenths to the beat
+    } else {
+      beats = beatPhase;
+    }
+    var off = beats - Math.floor(beats);
+    return off > 0.5 ? off - 1 : off;
+  }
+
+  function onBeat() {
+    return Math.abs(beatFrac()) * (60 / BPM) <= METRO_WINDOW;   // window in seconds
+  }
+
+  // ---- Echo -----------------------------------------------------------
+  // One rule for three shapes: the next ability is free and gets two uses'
+  // worth. Timed doubles its duration, instant runs twice, and a targeted
+  // one stays armed so it takes a second target.
+  var echoLive = false;      // an Echo is waiting to be spent
+  var echoPending = null;    // a targeted ability owed one more target
+
+  function doEcho() {
+    echoLive = true;
+    toast('Echo ready — your next ability is doubled');
+    beep(700, 0.09, 'sine', 0.07);
+    setTimeout(function () { beep(700, 0.13, 'sine', 0.05); }, 150);
+  }
+
+  // Called wherever a targeted ability can have finished resolving. If Echo
+  // owes it another target and nothing is armed any more, re-arm it free.
+  function echoCheck() {
+    if (!echoPending || armed) return;
+    var id = echoPending;
+    echoPending = null;
+    armed = id;
+    updateAbilities();
+    toast('Echo · ' + ABILITIES[id].name + ' again');
+  }
+
   function bossBounty(c) {
     var n = Math.max(1, Math.floor(c.maxHp / BOSS_TAPS_PER_CHARGE));
     var got = {}, id, k;
@@ -2921,29 +3302,79 @@
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
+  // ---------------------------------------------------------- gestures --
+  //
+  // Several abilities want this same stream for different purposes, so the
+  // kind of gesture is decided ONCE on pointerdown and owns the whole press.
+  // Without that, every new drag ability adds another condition to every
+  // handler and they start fighting each other.
+  //
+  //   'tap'    the default: pop a circle, and paint Fire if it is lit
+  //   'lasso'  trace a loop, judged on release
+  //   'vector' a straight drag from a start point, resolved on release
+  //   'hold'   sustained press on one circle
+  //
+  var gesture = null;        // { kind, ... } for the life of one press
+
+  function gestureKind() {
+    if (armed === 'lasso') return 'lasso';
+    if (armed === 'slingshot' || armed === 'laser') return 'vector';
+    if (armed === 'charge') return 'hold';
+    return 'tap';
+  }
+
   wrap.addEventListener('pointerdown', function (e) {
     e.preventDefault();
     initAudio();
     var pt = localPoint(e);
-    // Tapping keeps working while Fire is lit -- losing it for ten seconds
-    // would be a downgrade, so a drag paints *in addition* to the tap.
-    tapAt(pt.x, pt.y);
-    painting = true;
-    lastPaint = null;
-    paintFire(pt.x, pt.y);
+    var kind = gestureKind();
+    gesture = { kind: kind, x0: pt.x, y0: pt.y, x: pt.x, y: pt.y };
+
+    if (kind === 'tap') {
+      // Tapping keeps working while Fire is lit -- losing it for ten seconds
+      // would be a downgrade, so a drag paints *in addition* to the tap.
+      tapAt(pt.x, pt.y);
+      echoCheck();
+      painting = true;
+      lastPaint = null;
+      paintFire(pt.x, pt.y);
+      return;
+    }
+    if (kind === 'lasso') { lassoPath = [{ x: pt.x, y: pt.y }]; return; }
+    if (kind === 'hold') { beginHold(pt.x, pt.y); return; }
+    // 'vector' just records where the drag began; nothing happens until release
   });
 
   wrap.addEventListener('pointermove', function (e) {
-    if (!painting || !(timeLeft.fire > 0)) return;
-    e.preventDefault();
+    if (!gesture) return;
     var pt = localPoint(e);
-    paintFire(pt.x, pt.y);
+    gesture.x = pt.x; gesture.y = pt.y;
+
+    if (gesture.kind === 'tap') {
+      if (!painting || !(timeLeft.fire > 0)) return;
+      e.preventDefault();
+      paintFire(pt.x, pt.y);
+      return;
+    }
+    e.preventDefault();
+    if (gesture.kind === 'lasso') addLassoPoint(pt.x, pt.y);
   });
 
-  function stopPainting() { painting = false; lastPaint = null; }
-  wrap.addEventListener('pointerup', stopPainting);
-  wrap.addEventListener('pointercancel', stopPainting);
-  wrap.addEventListener('pointerleave', stopPainting);
+  function endGesture() {
+    if (gesture) {
+      if (gesture.kind === 'lasso') closeLasso();
+      else if (gesture.kind === 'vector') resolveVector(gesture);
+      else if (gesture.kind === 'hold') endHold();
+      echoCheck();
+    }
+    gesture = null;
+    painting = false;
+    lastPaint = null;
+  }
+
+  wrap.addEventListener('pointerup', endGesture);
+  wrap.addEventListener('pointercancel', endGesture);
+  wrap.addEventListener('pointerleave', endGesture);
   wrap.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   // ----------------------------------------------------------- draw frame
@@ -3122,6 +3553,137 @@
       ctx.restore();
     }
 
+    // ---- live gesture feedback -------------------------------------
+    // Every one of these is an input the player is in the middle of making.
+    // Without something on the canvas the drag abilities are guesswork.
+
+    // Laser cuts fade out where they were made.
+    for (i = 0; i < beams.length; i++) {
+      var bm = beams[i];
+      ctx.globalAlpha = Math.max(0, bm.life);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(bm.x1, bm.y1); ctx.lineTo(bm.x2, bm.y2);
+      ctx.strokeStyle = rgba(activeTheme.accent, 0.3);
+      ctx.lineWidth = LASER_WIDTH * 2;
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.lineCap = 'butt';
+    }
+
+    if (gesture) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (gesture.kind === 'lasso' && lassoPath.length > 1) {
+        // The traced path solid, the closing leg dashed: the loop is closed
+        // for you on release, and that has to be visible before you commit.
+        ctx.beginPath();
+        ctx.moveTo(lassoPath[0].x, lassoPath[0].y);
+        for (i = 1; i < lassoPath.length; i++) ctx.lineTo(lassoPath[i].x, lassoPath[i].y);
+        ctx.strokeStyle = rgba(activeTheme.gold, 0.9);
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(lassoPath[lassoPath.length - 1].x, lassoPath[lassoPath.length - 1].y);
+        ctx.lineTo(lassoPath[0].x, lassoPath[0].y);
+        ctx.strokeStyle = rgba(activeTheme.gold, 0.45);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Running total, so the budget is something you can aim at rather
+        // than something you find out about afterwards.
+        var tot = 0;
+        for (i = 0; i < circles.length; i++) {
+          if (!circles[i].boss && insideLoop(lassoPath, circles[i].x, circles[i].y)) {
+            tot += circles[i].hp;
+          }
+        }
+        ctx.font = '800 16px Montserrat, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = tot > LASSO_BUDGET ? C_DANGER : activeTheme.gold;
+        ctx.fillText(tot + ' / ' + LASSO_BUDGET, gesture.x, gesture.y - 22);
+      }
+
+      if (gesture.kind === 'vector') {
+        var vdx = gesture.x - gesture.x0, vdy = gesture.y - gesture.y0;
+        var vlen = Math.sqrt(vdx * vdx + vdy * vdy);
+        var ok = vlen >= VECTOR_MIN;
+
+        if (armed === 'laser') {
+          // Show the beam at its real width, so you can see what it clips.
+          ctx.beginPath();
+          ctx.moveTo(gesture.x0, gesture.y0); ctx.lineTo(gesture.x, gesture.y);
+          ctx.strokeStyle = rgba(activeTheme.accent, ok ? 0.28 : 0.12);
+          ctx.lineWidth = LASER_WIDTH * 2;
+          ctx.stroke();
+          ctx.strokeStyle = rgba('#ffffff', ok ? 0.85 : 0.3);
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        } else if (vlen > 1) {
+          // Slingshot fires the OTHER way, so draw the band behind and the
+          // shot ahead -- a catapult reads wrong without both.
+          var ux = -vdx / vlen, uy = -vdy / vlen;
+          var pw = Math.min(SLING_MAX, vlen * SLING_POWER) / SLING_MAX;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(gesture.x0, gesture.y0); ctx.lineTo(gesture.x, gesture.y);
+          ctx.strokeStyle = rgba(activeTheme.gold, 0.5);
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          var aim = 40 + 90 * pw;
+          ctx.beginPath();
+          ctx.moveTo(gesture.x0, gesture.y0);
+          ctx.lineTo(gesture.x0 + ux * aim, gesture.y0 + uy * aim);
+          ctx.strokeStyle = rgba(activeTheme.gold, ok ? 0.95 : 0.35);
+          ctx.lineWidth = 3 + 3 * pw;
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
+    // Metronome: a bar that swells on the beat. Judging a window you cannot
+    // see or hear would be pure luck, and the sound may well be off.
+    if (timeLeft.metronome > 0) {
+      var near = 1 - Math.min(1, Math.abs(beatFrac()) * 4);
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.6 * near * near;
+      ctx.fillStyle = onBeat() ? activeTheme.gold : rgba(activeTheme.gold, 0.5);
+      var bh = 3 + 6 * near;
+      ctx.fillRect(0, H - bh, W, bh);
+      ctx.restore();
+    }
+
+    // Charge Shot: a ring closing on the circle being held.
+    if (hold && circles.indexOf(hold.c) >= 0) {
+      var hc = hold.c;
+      var frac = Math.min(1, hold.t / CHARGE_MAX);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(hc.x, hc.y, hc.r + 9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+      ctx.strokeStyle = activeTheme.accent;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(hc.x, hc.y, hc.r + 9, 0, Math.PI * 2);
+      ctx.strokeStyle = rgba(activeTheme.accent, 0.2);
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Particles.
     for (i = 0; i < particles.length; i++) {
       var p = particles[i];
@@ -3237,6 +3799,12 @@
     gravityScale = timeLeft.slowmo > 0 ? SLOWMO_SCALE : 1;
 
     updateFire(dt);
+    updateSling(dt);
+    updateHold(dt);
+    // The beat clock rides the same BPM as the audio scheduler -- including
+    // the danger ramp -- so Metronome stays in step with what the player
+    // hears, and keeps working when they cannot hear it.
+    beatPhase += dt * (BPM / 60);
     if (mode.recharges) tickCooldowns(dt);
 
     // One boss per qualifying level, in the modes that actually spawn.
@@ -3405,6 +3973,36 @@
       name: 'Fire Trail', kind: 'timed', icon: 'fire', el: null, badge: null,
       hint: 'Hold and drag to lay fire for ' + FIRE_SECS + 's',
       secs: FIRE_SECS, bar: '#ff9d2e', done: 'Fire out'
+    },
+    lasso: {
+      name: 'Lasso', kind: 'targeted', icon: 'lasso', el: null, badge: null,
+      input: 'Draw a loop',
+      hint: 'Draw a loop round circles worth ' + LASSO_BUDGET + ' or less'
+    },
+    slingshot: {
+      name: 'Slingshot', kind: 'targeted', icon: 'sling', el: null, badge: null,
+      needsMotion: true,
+      input: 'Drag back and release',
+      hint: 'Drag back from a circle and let go to fire it'
+    },
+    laser: {
+      name: 'Laser Cut', kind: 'targeted', icon: 'laser', el: null, badge: null,
+      input: 'Drag a line',
+      hint: 'Drag a straight line to cut everything it crosses'
+    },
+    charge: {
+      name: 'Charge Shot', kind: 'targeted', icon: 'charge', el: null, badge: null,
+      input: 'Press and hold',
+      hint: 'Hold on one circle to burn it down'
+    },
+    metronome: {
+      name: 'Metronome', kind: 'timed', icon: 'metro', el: null, badge: null,
+      hint: 'Taps on the beat count double for ' + METRO_SECS + 's',
+      secs: METRO_SECS, bar: 'var(--gold)', done: 'Metronome over'
+    },
+    echo: {
+      name: 'Echo', kind: 'instant', icon: 'echo', el: null, badge: null,
+      hint: 'Your next ability is free and happens twice'
     },
     secondWind: {
       name: 'Second Wind', kind: 'instant', icon: 'second', el: null, badge: null,
@@ -3684,11 +4282,23 @@
   function useAbility(id) {
     var a = ABILITIES[id];
 
+    // Echo pays for the next ability and gives it two uses' worth. It is
+    // claimed here, once, so all three shapes read the same flag and only
+    // one of them can consume it.
+    var echoed = echoLive && id !== 'echo';
+
     if (a.kind === 'instant') {
       if (!abilityReady(id)) return;
       var paidNow = payFor(id);
+      if (echoed) { echoLive = false; refund(id); paidNow = null; }
       updateAbilities();
-      if (id === 'sweep') doSweep(); else if (id === 'secondWind') doSecondWind();
+      // "Twice" for an instant is simply running it again.
+      var runs = echoed ? 2 : 1;
+      for (var n = 0; n < runs; n++) {
+        if (id === 'sweep') doSweep();
+        else if (id === 'secondWind') doSecondWind();
+        else if (id === 'echo') doEcho();
+      }
       updateAbilities();
       if (paidNow) toast(a.name + '  (\u2212' + paidNow + ')');
       return;
@@ -3700,6 +4310,10 @@
       if (a.live() || !abilityReady(id)) return;
       var paid = payFor(id);
       a.start();
+      if (echoed) {
+        echoLive = false; refund(id); paid = null;
+        timeLeft[id] = a.secs * 2;             // "twice" for a timed ability
+      }
       updateAbilities();
       toast(paid ? a.hint + '  (\u2212' + paid + ')' : a.hint);
       beep(520, 0.10, 'square', 0.07);
@@ -3707,11 +4321,18 @@
       return;
     }
 
-    if (armed === id) { refund(id); armed = null; updateAbilities(); return; }
+    if (armed === id) {
+      refund(id); armed = null; echoPending = null; updateAbilities(); return;
+    }
     if (!abilityReady(id)) return;
     // A targeted ability is paid for when it is armed, so backing out of a
     // bomb does not refund -- same as the charge it would otherwise cost.
     var cost = payFor(id);
+    if (echoed) {
+      // "Twice" for a targeted ability is a second target: it re-arms itself
+      // once, free, after the first one resolves. See echoCheck().
+      echoLive = false; refund(id); cost = null; echoPending = id;
+    }
     armed = id;
     updateAbilities();
     toast(cost ? a.hint + '  (\u2212' + cost + ')' : a.hint);
@@ -3721,6 +4342,7 @@
     if (!armed) return;
     refund(armed);
     armed = null;
+    echoPending = null;
     updateAbilities();
   }
 
@@ -4353,6 +4975,21 @@
             'keep playing through.',
     fire: 'Hold and drag to lay a trail of fire. It keeps burning where you ' +
           'left it and damages anything sitting in it.',
+    lasso: 'Draw a loop. Everything you enclose pops at once, but only if ' +
+           'their numbers add up to ' + LASSO_BUDGET + ' or less \u2014 get ' +
+           'greedy and nothing happens.',
+    slingshot: 'Drag back from a circle and release to fire it across the ' +
+               'board. It damages whatever it hits on the way, then settles ' +
+               'wherever it lands.',
+    laser: 'Drag a straight line. Everything the line crosses takes ' +
+           LASER_DAMAGE + ' at once, however far apart they are.',
+    charge: 'Press and hold on one circle to burn it down continuously. The ' +
+            'rest of the board keeps falling while you commit to it.',
+    metronome: 'Taps that land on the beat of the music count double. The ' +
+               'tempo rises with the pile, so it gets harder as it matters ' +
+               'more.',
+    echo: 'The next ability you use costs nothing and happens twice \u2014 a ' +
+          'timed one runs double, an aimed one takes two targets.',
     secondWind: 'Refills every other ability you are carrying back to full. ' +
                 'One use per run, and nothing gives it back.'
   };
@@ -4540,7 +5177,7 @@
   function abilityDetail(id) {
     var a = ABILITIES[id], facts = [];
 
-    if (a.kind === 'targeted') facts.push('Aimed at a circle');
+    if (a.kind === 'targeted') facts.push(a.input || 'Aimed at a circle');
     else if (a.kind === 'timed') facts.push('Lasts ' + a.secs + 's');
     else facts.push('Instant');
 
@@ -4906,6 +5543,9 @@
     inOverload = false;
     fires.length = 0;
     painting = false; lastPaint = null;
+    gesture = null; lassoPath = []; beams.length = 0;
+    hold = null; beatPhase = 0;
+    echoLive = false; echoPending = null;
     for (var ck in cool) cool[ck] = 0;
     for (var tk in timeLeft) timeLeft[tk] = 0;
     for (var li = 0; li < loadout.length; li++) {
@@ -5229,6 +5869,23 @@
         return hp;
       },
       touching: touching,
+      lasso: function (pts) {
+        armed = 'lasso'; lassoPath = pts.slice(); closeLasso();
+      },
+      lassoPath: function () { return lassoPath.slice(); },
+      vector: function (x0, y0, x1, y1) {
+        resolveVector({ x0: x0, y0: y0, x: x1, y: y1 });
+      },
+      slings: function () {
+        return circles.filter(function (c) { return c.sling > 0; }).length;
+      },
+      hold: function () { return hold ? { t: hold.t, hp: hold.c.hp } : null; },
+      beginHold: beginHold,
+      endHold: endHold,
+      beat: function () { return { phase: beatPhase, onBeat: onBeat() }; },
+      setBeat: function (v) { beatPhase = v; },
+      echo: function () { return { live: echoLive, pending: echoPending }; },
+      timeLeft: function () { return JSON.parse(JSON.stringify(timeLeft)); },
       themes: THEMES,
       openStore: openStore,
       selectTheme: selectTheme,
