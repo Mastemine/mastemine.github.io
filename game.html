@@ -747,6 +747,58 @@
   #levelTop { padding: 0 4px 4px; }
 
   /* ---------- Settings ---------- */
+  #awards {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #awards.hidden { display: none; }
+  #awardsTop { padding: 0 16px 10px; }
+  #awardsBody {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    padding: 0 16px 18px; -webkit-overflow-scrolling: touch;
+  }
+  .agroup {
+    font-size: 10px; font-weight: 800; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--faint);
+    margin: 16px 0 8px;
+  }
+  .arow {
+    display: grid; grid-template-columns: 30px 1fr auto; gap: 10px;
+    align-items: center;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--surface); padding: 10px 12px; margin-bottom: 7px;
+  }
+  /* Locked rows are dimmed but never hidden: an achievement you cannot see
+     is not something you can work towards. */
+  .arow.locked { opacity: .5; }
+  .arow.got { border-color: var(--accent); }
+  .amark {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 900;
+    background: rgba(255,255,255,0.05); color: var(--faint);
+  }
+  .arow.got .amark { background: var(--accent); color: var(--accent-ink); }
+  .atext b { display: block; font-size: 12px; font-weight: 800; }
+  .atext span { display: block; font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .astats {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px;
+    margin-top: 12px;
+  }
+  .astat {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--surface); padding: 9px 11px;
+  }
+  .astat b { display: block; font-size: 15px; font-weight: 900; }
+  .astat span {
+    display: block; font-size: 9px; font-weight: 800; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); margin-top: 2px;
+  }
+
   #settings {
     position: absolute;
     inset: 0;
@@ -1292,6 +1344,7 @@
         <button class="btn btn-ghost" id="settingsBtn">Settings</button>
         <button class="btn btn-ghost" id="scoresBtn">Scores</button>
         <button class="btn btn-ghost" id="loadoutBtn">Loadout</button>
+        <button class="btn btn-ghost" id="awardsBtn">Awards</button>
         <button class="btn btn-ghost" id="helpBtn">Help</button>
       </div>
       <div class="hint" id="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
@@ -1380,6 +1433,20 @@
     </div>
     <div id="levelTop"></div>
     <div class="storegrid" id="levelGrid"></div>
+  </div>
+
+  <div id="awards" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Challenges</div>
+        <h2>Achievements</h2>
+      </div>
+      <button class="iconbtn" id="awardsClose" aria-label="Close achievements">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div id="awardsTop"></div>
+    <div id="awardsBody"></div>
   </div>
 
   <div id="settings" class="hidden">
@@ -1523,6 +1590,11 @@
   var levelGrid= document.getElementById('levelGrid');
   var levelTop = document.getElementById('levelTop');
   var helpBtn  = document.getElementById('helpBtn');
+  var awardsBtn = document.getElementById('awardsBtn');
+  var awardsEl = document.getElementById('awards');
+  var awardsClose = document.getElementById('awardsClose');
+  var awardsTop = document.getElementById('awardsTop');
+  var awardsBody = document.getElementById('awardsBody');
   var helpEl   = document.getElementById('help');
   var helpClose= document.getElementById('helpClose');
   var helpBody = document.getElementById('helpBody');
@@ -2862,6 +2934,8 @@
     var gain = Math.round(c.maxHp * 10 * mult * (1 + c.r / 120));
 
     if (mode.scores !== false) {
+      STATS.popped++;
+      if (chained) record('bestChain', chainLen);
       score += gain;
       elScore.textContent = score;
       elScore.classList.remove('bump');
@@ -2888,6 +2962,15 @@
     // Killing a boss funds the next stretch. Charge-based modes only: Rush
     // prices abilities in seconds, and already pays a boss its own number.
     if (c.boss && !mode.paysWithTime) bossBounty(c);
+
+    if (mode.scores !== false) {
+      if (c.boss) { STATS.bosses++; saveStats(); checkAchievements('boss'); }
+      checkAchievements('score');
+      if (chained) checkAchievements('chain');
+      // The pop counter moves on every kill; only test its milestones on the
+      // round numbers rather than ten thousand times.
+      if (STATS.popped % 25 === 0) { saveStats(); checkAchievements('pop'); }
+    }
 
     return gain;
   }
@@ -3530,6 +3613,10 @@
 
         iceOver(c);
         c.hp -= SHARD_DAMAGE;
+        var frozen = 0;
+        for (var q = 0; q < circles.length; q++) if (circles[q].iced > 0) frozen++;
+        record('bestIced', frozen);
+        checkAchievements('ability');
 
         if (c.hp > 0) {
           burst(c.x, c.y, c.r * 0.4, ICE, 5);
@@ -4265,6 +4352,20 @@
     elLevel.textContent = mode.hudValue();
     if (mode.id === 'rush') elLevel.classList.toggle('urgent', clock <= 5);
 
+    // Level, clock and elapsed-time milestones move slowly, so they are
+    // tested once a second rather than sixty times.
+    achTick += dt;
+    if (achTick >= 1) {
+      achTick = 0;
+      if (mode.scores !== false) {
+        record('bestLevel', level());
+        record('bestRun', Math.floor(elapsed));
+        if (mode.id === 'rush') record('bestClock', Math.floor(clock));
+        checkAchievements('level');
+        if (mode.paysWithTime) checkAchievements('clock');
+      }
+    }
+
     // How close is the pile to the top?
     var topmost = Infinity;
     for (var i = 0; i < circles.length; i++) {
@@ -4834,6 +4935,9 @@
       if (c.iced > 0) shatter(c);
     }
 
+    record('bestBomb', victims.length);
+    checkAchievements('ability');
+
     var mult = Math.min(BOMB_CAP, 1 + BOMB_STEP * (victims.length - 1));
     total = Math.round(total * mult);
 
@@ -5186,6 +5290,7 @@
     if (!isUnlocked(t)) return;
     applyTheme(t);
     renderStore();
+    checkAchievements('theme');
     toast(t.name + ' applied');
   }
 
@@ -5772,6 +5877,57 @@
   modesBtn.addEventListener('click', openModes);
   modesClose.addEventListener('click', closeModes);
 
+  // ---- achievements panel ---------------------------------------------
+  //
+  // Built from the same table the game tests against, so a row cannot exist
+  // in one place and not the other. Locked rows are shown, dimmed, with
+  // their requirement spelled out -- an achievement you cannot see is not
+  // something you can work towards.
+  //
+  function renderAwards() {
+    var got = achievedCount(), total = ACHIEVEMENTS.length;
+
+    awardsTop.innerHTML =
+      '<div class="lifeline"><span>Unlocked</span><b>' + got + ' of ' + total + '</b></div>' +
+      '<div class="lifebar"><i style="width:' + ((got / total) * 100).toFixed(1) + '%"></i></div>' +
+      '<div class="astats">' +
+        stat(nfmt(STATS.popped), 'Circles popped') +
+        stat(nfmt(STATS.bosses), 'Bosses felled') +
+        stat(nfmt(STATS.runs), 'Runs finished') +
+        stat(STATS.bestChain ? '×' + STATS.bestChain : '—', 'Longest chain') +
+        stat(STATS.bestLevel || '—', 'Best level') +
+        stat(STATS.bestRun ? secsLabel(STATS.bestRun) : '—', 'Longest run') +
+      '</div>';
+
+    var html = '', lastGroup = null;
+    for (var i = 0; i < ACHIEVEMENTS.length; i++) {
+      var a = ACHIEVEMENTS[i], have = !!achieved[a.id];
+      if (a.group !== lastGroup) {
+        lastGroup = a.group;
+        html += '<div class="agroup">' + a.group + '</div>';
+      }
+      html += '<div class="arow ' + (have ? 'got' : 'locked') + '">' +
+        '<span class="amark">' + (have ? '✓' : '★') + '</span>' +
+        '<span class="atext"><b>' + a.name + '</b><span>' + a.blurb + '</span></span>' +
+        '<span class="lstars">' + (have ? '★' : '') + '</span>' +
+      '</div>';
+    }
+    awardsBody.innerHTML = html;
+  }
+
+  function stat(value, label) {
+    return '<div class="astat"><b>' + value + '</b><span>' + label + '</span></div>';
+  }
+
+  function openAwards() { renderAwards(); awardsEl.classList.remove('hidden'); }
+  function closeAwards() {
+    awardsEl.classList.add('hidden');
+    if (!started || over) overlay.classList.remove('hidden');
+  }
+
+  awardsBtn.addEventListener('click', openAwards);
+  awardsClose.addEventListener('click', closeAwards);
+
   // ------------------------------------------------------- settings ----
   function syncSettings() {
     musicSw.checked = AUDIO.musicOn && !AUDIO.muted;
@@ -5784,6 +5940,223 @@
     sfxVol.disabled = !sfxSw.checked;
     musicRow.classList.toggle('off', !musicSw.checked);
     sfxRow.classList.toggle('off', !sfxSw.checked);
+  }
+
+  // ---------------------------------------------------------- achievements
+  //
+  // A long checklist that outlives any one run. Two pieces:
+  //
+  //   STATS  lifetime counters, saved as they change
+  //   ACHIEVEMENTS  one row each, with the moment it is worth testing
+  //
+  // Rows carry `when` so a moment only evaluates the handful of rows that
+  // could possibly have changed -- testing all thirty on every pop would be
+  // waste, and testing them lazily would mean the toast arrives late.
+  //
+  // Kid Mode earns nothing here, exactly as it scores nothing: it is for
+  // playing, and it would otherwise be the cheapest place to farm the lot.
+  //
+  var STATS_KEY = 'popStats';
+  var ACH_KEY = 'popAch';
+
+  var STATS = {
+    popped: 0,        // circles destroyed, lifetime
+    bosses: 0,        // bosses killed, lifetime
+    runs: 0,          // runs finished
+    bestChain: 0,     // longest chain
+    bestBomb: 0,      // most circles in one blast
+    bestIced: 0,      // most circles frozen at once
+    bestLevel: 0,     // furthest Endless level
+    bestClock: 0,     // most seconds banked in Rush
+    bestRun: 0        // longest run, in seconds
+  };
+  var achieved = {};
+
+  function loadProgress() {
+    try {
+      var st = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
+      if (st) for (var k in STATS) if (typeof st[k] === 'number') STATS[k] = st[k];
+      achieved = JSON.parse(localStorage.getItem(ACH_KEY) || '{}') || {};
+    } catch (e) { achieved = {}; }
+  }
+  function saveStats() {
+    try { localStorage.setItem(STATS_KEY, JSON.stringify(STATS)); } catch (e) {}
+  }
+  function saveAchieved() {
+    try { localStorage.setItem(ACH_KEY, JSON.stringify(achieved)); } catch (e) {}
+  }
+
+  // A high-water mark that only ever writes when it actually moves.
+  function record(key, value) {
+    if (value > STATS[key]) { STATS[key] = value; saveStats(); }
+  }
+
+  var ACHIEVEMENTS = [
+    // ---- scoring
+    { id: 'score1k',  group: 'Scoring', name: 'Opening Act',
+      blurb: 'Score 1,000 in a single run.',
+      when: 'score', test: function () { return score >= 1000; } },
+    { id: 'score10k', group: 'Scoring', name: 'Five Figures',
+      blurb: 'Score 10,000 in a single run.',
+      when: 'score', test: function () { return score >= 10000; } },
+    { id: 'score50k', group: 'Scoring', name: 'High Roller',
+      blurb: 'Score 50,000 in a single run.',
+      when: 'score', test: function () { return score >= 50000; } },
+    { id: 'score100k', group: 'Scoring', name: 'Six Figures',
+      blurb: 'Score 100,000 in a single run.',
+      when: 'score', test: function () { return score >= 100000; } },
+    { id: 'life1m', group: 'Scoring', name: 'Millionaire',
+      blurb: 'Reach 1,000,000 lifetime score.',
+      when: 'score', test: function () { return lifetime >= 1000000; } },
+
+    // ---- chains
+    { id: 'chain5',  group: 'Chains', name: 'On a Roll',
+      blurb: 'Chain five circles of the same number.',
+      when: 'chain', test: function () { return chainLen >= 5; } },
+    { id: 'chain10', group: 'Chains', name: 'Streak',
+      blurb: 'Chain ten in a row.',
+      when: 'chain', test: function () { return chainLen >= 10; } },
+    { id: 'chain15', group: 'Chains', name: 'Unbroken',
+      blurb: 'Chain fifteen in a row.',
+      when: 'chain', test: function () { return chainLen >= 15; } },
+    { id: 'chainCap', group: 'Chains', name: 'Maxed Out',
+      blurb: 'Push the chain multiplier to its ' + CHAIN_CAP + '× ceiling.',
+      when: 'chain',
+      test: function () { return 1 + CHAIN_STEP * (chainLen - 1) >= CHAIN_CAP; } },
+
+    // ---- endless
+    { id: 'lv10', group: 'Endless', name: 'Double Digits',
+      blurb: 'Reach level 10.',
+      when: 'level', test: function () { return level() >= 10; } },
+    { id: 'lv25', group: 'Endless', name: 'Long Haul',
+      blurb: 'Reach level 25.',
+      when: 'level', test: function () { return level() >= 25; } },
+    { id: 'lv40', group: 'Endless', name: 'Deep Water',
+      blurb: 'Reach level 40.',
+      when: 'level', test: function () { return level() >= 40; } },
+    { id: 'boss1', group: 'Endless', name: 'Boss Hunter',
+      blurb: 'Bring down your first boss.',
+      when: 'boss', test: function () { return STATS.bosses >= 1; } },
+    { id: 'boss10', group: 'Endless', name: 'Giant Slayer',
+      blurb: 'Bring down ten bosses.',
+      when: 'boss', test: function () { return STATS.bosses >= 10; } },
+    { id: 'survive5', group: 'Endless', name: 'Stayer',
+      blurb: 'Keep one run alive for five minutes.',
+      when: 'level', test: function () { return elapsed >= 300; } },
+
+    // ---- rush
+    { id: 'clock60', group: 'Rush', name: 'Against the Clock',
+      blurb: 'Bank a minute on the Rush clock.',
+      when: 'clock', test: function () { return clock >= 60; } },
+    { id: 'clockMax', group: 'Rush', name: 'Overtime',
+      blurb: 'Fill the Rush clock to its ' + RUSH_MAX + '-second ceiling.',
+      when: 'clock', test: function () { return clock >= RUSH_MAX - 0.5; } },
+    { id: 'rush25k', group: 'Rush', name: 'Time Well Spent',
+      blurb: 'Score 25,000 in a single Rush run.',
+      when: 'score',
+      test: function () { return mode.id === 'rush' && score >= 25000; } },
+
+    // ---- puzzle
+    { id: 'puz1', group: 'Puzzle', name: 'First Solve',
+      blurb: 'Clear any puzzle board.',
+      when: 'puzzle', test: function () { return levelsDone() >= 1; } },
+    { id: 'puz3star', group: 'Puzzle', name: 'Perfectionist',
+      blurb: 'Take three stars on any board.',
+      when: 'puzzle', test: function () {
+        for (var i = 0; i < LEVELS.length; i++) {
+          if (puzzleStars[LEVELS[i].id] >= 3) return true;
+        }
+        return false;
+      } },
+    { id: 'puzHalf', group: 'Puzzle', name: 'Halfway House',
+      blurb: 'Clear half the puzzle boards.',
+      when: 'puzzle',
+      test: function () { return levelsDone() >= Math.ceil(LEVELS.length / 2); } },
+    { id: 'puzAll', group: 'Puzzle', name: 'Completionist',
+      blurb: 'Clear every puzzle board.',
+      when: 'puzzle', test: function () { return allLevelsDone(); } },
+    { id: 'puzFlawless', group: 'Puzzle', name: 'Flawless',
+      blurb: 'Take three stars on every board.',
+      when: 'puzzle', test: function () {
+        for (var i = 0; i < LEVELS.length; i++) {
+          if (!(puzzleStars[LEVELS[i].id] >= 3)) return false;
+        }
+        return true;
+      } },
+
+    // ---- abilities
+    { id: 'bomb8', group: 'Abilities', name: 'Demolition',
+      blurb: 'Catch eight circles in one bomb.',
+      when: 'ability', test: function () { return STATS.bestBomb >= 8; } },
+    { id: 'iced10', group: 'Abilities', name: 'Cold Front',
+      blurb: 'Have ten circles frozen at once.',
+      when: 'ability', test: function () { return STATS.bestIced >= 10; } },
+    { id: 'unlockAll', group: 'Abilities', name: 'Fully Equipped',
+      blurb: 'Unlock every ability.',
+      when: 'score', test: function () { return !nextUnlock(); } },
+
+    // ---- volume
+    { id: 'pop1k', group: 'Milestones', name: 'Thousand Down',
+      blurb: 'Pop 1,000 circles.',
+      when: 'pop', test: function () { return STATS.popped >= 1000; } },
+    { id: 'pop10k', group: 'Milestones', name: 'Ten Thousand Down',
+      blurb: 'Pop 10,000 circles.',
+      when: 'pop', test: function () { return STATS.popped >= 10000; } },
+    { id: 'runs25', group: 'Milestones', name: 'Regular',
+      blurb: 'Finish 25 runs.',
+      when: 'endRun', test: function () { return STATS.runs >= 25; } },
+    { id: 'themeAny', group: 'Milestones', name: 'Redecorated',
+      blurb: 'Play with a theme you bought.',
+      when: 'theme',
+      test: function () { return activeTheme.price > 0 && owned[activeTheme.id]; } }
+  ];
+
+  var ACH_BY_WHEN = {};
+  (function indexAchievements() {
+    for (var i = 0; i < ACHIEVEMENTS.length; i++) {
+      var a = ACHIEVEMENTS[i];
+      (ACH_BY_WHEN[a.when] || (ACH_BY_WHEN[a.when] = [])).push(a);
+    }
+  })();
+
+  // Queued rather than toasted immediately: a cascade can complete three at
+  // once, and three toasts fired in the same frame would replace each other
+  // and the player would see only the last.
+  var achQueue = [], achTimer = null;
+  var achTick = 0;          // seconds since the last slow-moving check
+
+  function announceAchievement() {
+    if (!achQueue.length) { achTimer = null; return; }
+    var a = achQueue.shift();
+    toast('★  ' + a.name + ' — ' + a.blurb);
+    beep(700, 0.10, 'sine', 0.08);
+    setTimeout(function () { beep(1050, 0.16, 'sine', 0.07); }, 100);
+    achTimer = setTimeout(announceAchievement, 2600);
+  }
+
+  function checkAchievements(when) {
+    // Kid Mode is exempt from the whole system, on purpose.
+    if (mode && mode.scores === false) return;
+    var rows = ACH_BY_WHEN[when];
+    if (!rows) return;
+
+    for (var i = 0; i < rows.length; i++) {
+      var a = rows[i];
+      if (achieved[a.id]) continue;
+      var got = false;
+      try { got = a.test(); } catch (e) { got = false; }
+      if (!got) continue;
+      achieved[a.id] = Date.now();
+      saveAchieved();
+      achQueue.push(a);
+    }
+    if (achQueue.length && !achTimer) announceAchievement();
+  }
+
+  function achievedCount() {
+    var n = 0;
+    for (var i = 0; i < ACHIEVEMENTS.length; i++) if (achieved[ACHIEVEMENTS[i].id]) n++;
+    return n;
   }
 
   // ---- pop-effect picker ----------------------------------------------
@@ -5969,6 +6342,7 @@
            !setEl.classList.contains('hidden') ||
            !modesEl.classList.contains('hidden') ||
            !levelsEl.classList.contains('hidden') ||
+           !awardsEl.classList.contains('hidden') ||
            !helpEl.classList.contains('hidden') ||
            !loadoutSheet.classList.contains('hidden') ||
            !buyPanel.classList.contains('hidden') ||
@@ -6192,6 +6566,10 @@
     if (mode.scores !== false) {
       addLifetime(score);
       recordRun(mode.id, score);
+      STATS.runs++;
+      saveStats();
+      checkAchievements('endRun');
+      checkAchievements('score');       // lifetime and unlock-all live here
     }
     over = true;
     running = false;
@@ -6262,6 +6640,7 @@
     if (won) {
       var prev = puzzleStars[lv.id] || 0;
       if (stars > prev) { puzzleStars[lv.id] = stars; savePuzzle(); }
+      checkAchievements('puzzle');
       beep(660, 0.14, 'sine', 0.10);
       setTimeout(function () { beep(880, 0.16, 'sine', 0.09); }, 110);
       setTimeout(function () { beep(1170, 0.24, 'sine', 0.08); }, 230);
@@ -6352,6 +6731,7 @@
       else if (!scoresEl.classList.contains('hidden')) closeScores();
       else if (!modesEl.classList.contains('hidden')) closeModes();
       else if (!levelsEl.classList.contains('hidden')) closeLevels();
+      else if (!awardsEl.classList.contains('hidden')) closeAwards();
       else if (mode.id === 'puzzle') openLevels();
       else if (!storeEl.classList.contains('hidden')) closeStore();
       return;
@@ -6474,6 +6854,17 @@
         return hp;
       },
       touching: touching,
+      achievements: ACHIEVEMENTS,
+      achieved: function () { return JSON.parse(JSON.stringify(achieved)); },
+      stats: function () { return JSON.parse(JSON.stringify(STATS)); },
+      setStats: function (o) { for (var k in o) if (k in STATS) STATS[k] = o[k]; saveStats(); },
+      checkAchievements: checkAchievements,
+      openAwards: openAwards,
+      resetAwards: function () {
+        achieved = {}; saveAchieved();
+        for (var k in STATS) STATS[k] = 0;
+        saveStats();
+      },
       shards: function () { return shards.length; },
       iced: function () {
         return circles.filter(function (c) { return c.iced > 0; })
@@ -6522,6 +6913,7 @@
 
   loadOwned();
   loadPopFx();
+  loadProgress();
 
   var savedTheme = THEMES[0];
   try {
