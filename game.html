@@ -141,6 +141,34 @@
     font-variant-numeric: tabular-nums;
   }
   #score.bump { animation: bump .18s ease-out; }
+  @keyframes chargePop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.65); }
+    100% { transform: scale(1); }
+  }
+  .abtn.gained .charges { animation: chargePop .5s ease-out; }
+
+  /* Recharge progress, along the foot of the button. */
+  .cdbar {
+    display: none;
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    bottom: 3px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  .cdbar i {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .abtn.gained .charges { animation: none; }
+  }
   /* Rush clock in its last five seconds. */
   .value.urgent { color: var(--danger, #f87171); }
   @keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
@@ -1280,6 +1308,19 @@
   var CHAIN_CAP  = 3;         // ceiling, so a long chain can't run away
 
   // Abilities are armed, then spent on the next circle you tap.
+  // Bosses pay a bounty: one charge per this many taps they took, so the
+  // reward tracks the effort and scales on its own as bosses grow.
+  var MAX_CHARGES = 5;            // per ability, so charges cannot be hoarded
+  var BOSS_TAPS_PER_CHARGE = 15;
+
+  // Abilities trickle back on a timer. Three rules govern it:
+  //   * the trickle only refills up to the run's STARTING allowance, so a
+  //     boss bounty can still push you above that and stay above it;
+  //   * a timer only runs while you are actually below that allowance;
+  //   * a timer does not start until the ability has finished being used --
+  //     a live Lightning is not cooling down, it is still running.
+  var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 180 };
+
   var BOMB_CHARGES = 3;       // per run
   var FREEZE_CHARGES = 1;     // per run
   var FREEZE_SECS = 15;       // how long everything stands still
@@ -1291,6 +1332,12 @@
   var TOUCH_SLOP = 3;         // px of tolerance for "touching"
 
   var DTAP_CHARGES = 2;       // per run
+  var cool = { bomb: 0, doubleTap: 0, lightning: 0, freeze: 0 };
+  // The allowance the trickle refills up to -- deliberately the run's
+  // starting stock, not MAX_CHARGES, so bounty surplus is never topped back
+  // up automatically and stays something you earned.
+  var START_MAX = { bomb: BOMB_CHARGES, doubleTap: DTAP_CHARGES,
+                    lightning: LIGHT_CHARGES, freeze: FREEZE_CHARGES };
   var DTAP_SECS = 30;         // how long double tap lasts
   var DTAP_DAMAGE = 2;        // points knocked off per tap while it runs
   var BOMB_STEP = 0.15;       // bonus per extra circle caught in one blast
@@ -1607,6 +1654,8 @@
       spawnGap: function () { return Math.max(0.45, 1.45 - elapsed * 0.013); },
       hpRamp: 80,
       paysWithTime: false,
+      recharges: true,
+      levelLine: true,
       setup: function () {},
       tick: function () {},
       onPop: function () {},
@@ -1812,7 +1861,10 @@
   function bossHp(lv) { return 10 + lv; }
 
   function difficulty() { return 1 + elapsed / (mode.hpRamp || HP_RAMP); }
-  function level() { return 1 + Math.floor(elapsed / 20); }
+  var LEVEL_SECS = 20;
+  function level() { return 1 + Math.floor(elapsed / LEVEL_SECS); }
+  // 0 at the top of a level, 1 as it completes.
+  function levelProgress() { return (elapsed % LEVEL_SECS) / LEVEL_SECS; }
 
   function radiusRange() {
     var base = Math.min(W, 560) / 560;
@@ -2061,7 +2113,98 @@
       showMult ? activeTheme.gold : hpColor(c.maxHp));
     burst(c.x, c.y, c.r, hpColor(c.maxHp));
     mode.onPop(c, gain, chained);
+
+    // Killing a boss funds the next stretch. Charge-based modes only: Rush
+    // prices abilities in seconds, and already pays a boss its own number.
+    if (c.boss && !mode.paysWithTime) bossBounty(c);
+
     return gain;
+  }
+
+  // Roll among the abilities that are actually below the cap rather than all
+  // four, so a hard-won bounty never lands silently on something already full.
+  function grantCharge() {
+    var pool = [];
+    for (var id in ABILITIES) {
+      var a = ABILITIES[id];
+      if (a.needsMotion && !mode.spawns) continue;   // not offered in this mode
+      if (a.stock() < MAX_CHARGES) pool.push(id);
+    }
+    if (!pool.length) return null;
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    ABILITIES[pick].restock();
+    return pick;
+  }
+
+  function pulseBadge(id) {
+    var el = ABILITIES[id].el;
+    if (!el) return;
+    el.classList.remove('gained');
+    void el.offsetWidth;
+    el.classList.add('gained');
+    setTimeout(function () { el.classList.remove('gained'); }, 520);
+  }
+
+  function tickCooldowns(dt) {
+    for (var id in ABILITIES) {
+      var a = ABILITIES[id];
+
+      // At or above the starting allowance there is nothing to trickle back,
+      // so the timer sits at zero rather than banking progress.
+      if (a.stock() >= START_MAX[id]) { cool[id] = 0; continue; }
+
+      // Still being used: its time has not run out, so the cooldown has not
+      // begun. Progress is held, not discarded.
+      if (a.live()) continue;
+
+      cool[id] += dt;
+      if (cool[id] >= COOLDOWN[id]) {
+        cool[id] = 0;
+        a.restock();
+        updateAbilities();
+        pulseBadge(id);
+        toast(a.name + ' recharged');
+        beep(620, 0.10, 'sine', 0.07);
+      }
+    }
+    paintCooldowns();
+  }
+
+  // Cheap per-frame paint: only the bar widths, never the whole button state.
+  function paintCooldowns() {
+    for (var id in ABILITIES) {
+      var a = ABILITIES[id];
+      if (!a.cd) continue;
+      var running = mode.recharges && a.stock() < START_MAX[id] && !a.live();
+      a.cd.style.display = running ? 'block' : 'none';
+      if (running) a.cdFill.style.width = (cool[id] / COOLDOWN[id] * 100).toFixed(1) + '%';
+    }
+  }
+
+  function bossBounty(c) {
+    var n = Math.max(1, Math.floor(c.maxHp / BOSS_TAPS_PER_CHARGE));
+    var got = {}, id, k;
+
+    for (var i = 0; i < n; i++) {
+      id = grantCharge();
+      if (!id) break;                 // everything is capped
+      got[id] = (got[id] || 0) + 1;
+    }
+
+    updateAbilities();
+
+    var names = [];
+    for (k in got) names.push(ABILITIES[k].name + ' +' + got[k]);
+
+    if (!names.length) {
+      toast('Bounty wasted \u2014 every ability is full');
+      return;
+    }
+
+    for (k in got) pulseBadge(k);
+    toast('Bounty \u00b7 ' + names.join('  \u00b7  '));
+    beep(700, 0.12, 'sine', 0.09);
+    setTimeout(function () { beep(1050, 0.18, 'sine', 0.08); }, 110);
   }
 
   // Circles the solver is holding against this one. A settled pile resolves
@@ -2161,6 +2304,27 @@
       ctx.strokeStyle = rgba(activeTheme.accent, (0.35 + 0.25 * Math.sin(chainPulse * 1.6)).toFixed(3));
       ctx.lineWidth = 3;
       ctx.strokeRect(1.5, 1.5, W - 3, H - 3);
+    }
+
+    // Level line: one sweep from top to bottom per level. It reaching the
+    // floor is the level turning over, so progress can be read in the
+    // playfield instead of by watching the number in the corner.
+    if (mode.levelLine && started && !over) {
+      var lp = levelProgress();
+      var ly = Math.round(lp * H) + 0.5;
+      var near = 0.18 + 0.34 * lp * lp;          // brightens as it lands
+
+      ctx.beginPath();
+      ctx.moveTo(0, ly);
+      ctx.lineTo(W, ly);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = rgba(activeTheme.accent, near.toFixed(3));
+      ctx.stroke();
+
+      // a brighter nub at each end so the line reads as deliberate
+      ctx.fillStyle = rgba(activeTheme.accent, Math.min(0.9, near + 0.3).toFixed(3));
+      ctx.fillRect(0, ly - 1.5, 14, 3);
+      ctx.fillRect(W - 14, ly - 1.5, 14, 3);
     }
 
     // Chain halos. Once a circle has been tapped its face no longer shows
@@ -2383,6 +2547,7 @@
       if (freezeTime === 0) { toast(ABILITIES.freeze.done); beep(300, 0.22, 'triangle', 0.06); }
     }
     if (ticked) updateAbilities();
+    if (mode.recharges) tickCooldowns(dt);
 
     // One boss per qualifying level, in the modes that actually spawn.
     var lv = level();
@@ -2551,8 +2716,11 @@
   function initAbilities() {
     for (var id in ABILITIES) {
       var a = ABILITIES[id];
-      a.el.innerHTML = ICON[a.icon] + '<span class="charges"></span>';
+      a.el.innerHTML = ICON[a.icon] + '<span class="charges"></span>' +
+                       '<span class="cdbar"><i></i></span>';
       a.badge = a.el.querySelector('.charges');
+      a.cd = a.el.querySelector('.cdbar');
+      a.cdFill = a.cd.querySelector('i');
 
       // Every timed ability gets its own clock lane, so two can run at once.
       if (a.kind === 'timed') {
@@ -3401,6 +3569,7 @@
     lights = LIGHT_CHARGES; lightTime = 0;
     freezes = FREEZE_CHARGES; freezeTime = 0;
     lastBossLevel = 0;
+    for (var ck in cool) cool[ck] = 0;
     arcs.length = 0;
     spawnTimer = 0; dangerTimer = 0; dangerGlow = 0;
     shake = 0; flashOver = 0;
@@ -3658,6 +3827,26 @@
       setFreeze: function (v) { freezeTime = v; },
       setElapsed: function (v) { elapsed = v; },
       bossHp: bossHp,
+      charges: function () {
+        return { bomb: bombs, doubleTap: dtaps, lightning: lights, freeze: freezes };
+      },
+      setCharges: function (o) {
+        if ('bomb' in o) bombs = o.bomb;
+        if ('doubleTap' in o) dtaps = o.doubleTap;
+        if ('lightning' in o) lights = o.lightning;
+        if ('freeze' in o) freezes = o.freeze;
+        updateAbilities();
+      },
+      maxCharges: MAX_CHARGES,
+      cooldowns: function () { return JSON.parse(JSON.stringify(cool)); },
+      cooldownSpec: COOLDOWN,
+      startMax: START_MAX,
+      setCooldown: function (id, v) { cool[id] = v; },
+      setLive: function (id, v) {
+        if (id === 'doubleTap') dtapTime = v;
+        else if (id === 'lightning') lightTime = v;
+        else if (id === 'freeze') freezeTime = v;
+      },
       spawnBoss: spawnBoss,
       bosses: function () { return circles.filter(function (c) { return c.boss; }); },
       hpRoll: function (t) {
