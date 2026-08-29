@@ -1744,7 +1744,7 @@
   // In a timed mode abilities are unlimited but bought with the clock, and
   // the pops they cause pay nothing back -- they buy board control, never
   // time. Endless and Puzzle keep counted charges instead.
-  var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 30, freeze: 15,
+  var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 10, freeze: 15,
                        split: 10, overload: 25, sweep: 20, wildcard: 20,
                        slowmo: 15, fire: 25, secondWind: 40,
                        lasso: 20, slingshot: 12, laser: 15, charge: 15,
@@ -1770,7 +1770,7 @@
   //   * a timer does not start until the ability has finished being used --
   //     a live Lightning is not cooling down, it is still running.
   // Second Wind is absent on purpose -- it never recharges. See noRefill.
-  var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 180,
+  var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 60,
                    split: 50, overload: 150, sweep: 90, wildcard: 150,
                    slowmo: 100, fire: 60,
                    lasso: 110, slingshot: 55, laser: 70, charge: 65,
@@ -1864,7 +1864,9 @@
   var LEVEL_GREEN = '#4ade80';
 
   var LIGHT_CHARGES = 2;      // per run
-  var LIGHT_SECS = 30;        // how long lightning touch lasts
+  // Five seconds, down from thirty: it is a burst you spend at the right
+  // moment now, not a mode you switch into.
+  var LIGHT_SECS = 5;
   var LIGHT_DAMAGE = 1;       // dealt to each circle touching the one tapped
   var TOUCH_SLOP = 3;         // px of tolerance for "touching"
 
@@ -1907,8 +1909,14 @@
   function hpColor(hp) {
     var i = Math.max(0, hp - 1);
     if (i < PALETTE.length) return PALETTE[i];
+    // Past the palette the last colour is deepened progressively, spread
+    // across however far MAX_HP now reaches rather than in fixed steps that
+    // saturate. Chains key on the number a circle STARTED on, so a 13 and a
+    // 17 sitting side by side must not read as the same colour.
     var over = i - PALETTE.length + 1;
-    return darkenHex(PALETTE[PALETTE.length - 1], Math.min(0.46, 0.16 * over));
+    var span = Math.max(1, MAX_HP - PALETTE.length);
+    return darkenHex(PALETTE[PALETTE.length - 1],
+                     Math.min(0.62, 0.10 + 0.52 * (over / span)));
   }
 
   // ---------------------------------------------------------------- state
@@ -2230,13 +2238,18 @@
       // score that unlocks abilities.
       scores: false,
       sizeScale: 1.35,          // bigger targets for small fingers
-      gravity: GRAVITY * 0.42,
+      // Quicker than it was: at 0.42 the drop was so slow that there was
+      // nothing to react to and attention wandered. Still well under half
+      // adult speed, and against a ceiling of 3 on targets this big it is
+      // still very hard to lose.
+      gravity: GRAVITY * 0.62,
       spawns: true, nudge: true, topOut: 'end',
       continues: true, tracksBest: false, recharges: true, levelLine: true,
       hudLabel: 'Level',
       hudValue: function () { return level(); },
-      // Barely ramps, and never faster than one circle every two seconds.
-      spawnGap: function () { return Math.max(2.0, 3.2 - elapsed * 0.003); },
+      // Barely ramps, and never faster than about one circle every second
+      // and a half -- enough arriving to keep something always happening.
+      spawnGap: function () { return Math.max(1.5, 2.6 - elapsed * 0.003); },
       hpRamp: 400,
       paysWithTime: false,
       setup: function () {},
@@ -2524,7 +2537,12 @@
   // mode.hpRamp: Endless is a long sit-down so it climbs gently, while Rush
   // is over in a couple of minutes and needs its numbers to arrive.
   var HP_RAMP = 45;   // fallback only
-  var MAX_HP = 12;    // the ceiling: past this it stops being keepable-up-with
+  // The ceiling. Raised from 12 after play-testing: people use four fingers,
+  // not one, and a wall of twelves stopped being a wall. Note that this
+  // changes only where the ramp STOPS -- difficulty() is untouched, so the
+  // first 12 still arrives at exactly the same moment it always did, and
+  // everything past that is new headroom rather than a faster climb.
+  var MAX_HP = 20;
 
   // Bosses arrive every fifth level: 15 at level 5, then +5 each time, so
   // bossHp(level) is simply 10 + level. They are big, and abilities do not
@@ -7028,6 +7046,7 @@
         return hp;
       },
       touching: touching,
+      hpColor: hpColor,
       traits: TRAITS,
       traitChance: function () { return TRAIT_CHANCE; },
       traitsOn: function () {
