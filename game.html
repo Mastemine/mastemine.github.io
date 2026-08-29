@@ -1812,6 +1812,17 @@
   var CHARGE_DPS = 2.2;
   var CHARGE_MAX = 5;         // seconds before the hold ends itself
 
+  // Traits: a minority of falling circles carry an effect that fires when
+  // they pop. One rewards popping and one punishes it, so the ring that
+  // marks them is a decision the player gets to make.
+  var TRAIT_CHANCE = 0.11;    // of spawned circles carry a trait
+  var BLAST_RADIUS = 2.7;     // blast reach, in multiples of the circle's own r
+  var BLAST_DAMAGE = 1;
+  var BLAST_PUSH = 8;         // shove at the centre, px per step, falling off
+  var BLAST_MAX_CHAIN = 4;    // blasts setting off blasts, depth limit
+  var SEED_INTO = 3;          // smaller circles a seeder leaves behind
+  var SEED_SCALE = 0.55;      // their radius, relative to the parent
+
   // Ice Shards: freeze one circle where it stands; popping it throws six
   // shards that ice and damage whatever they reach, and popping THOSE
   // throws six more. The cascade is paced by shard travel time, so the only
@@ -2209,6 +2220,9 @@
       // Everything here is dialled down together: a low ceiling on the
       // numbers is not enough on its own if the circles still arrive at
       // adult speed, and bosses would be absurd against a cap of 3.
+      // No trait circles: Kid Mode is meant to be gentle and unsurprising,
+      // and a seeder quietly making the board harder is the opposite.
+      traits: false,
       maxHp: 3,
       bosses: false,
       // Nothing is scored here. That is not only cosmetic: without it Kid
@@ -2584,6 +2598,7 @@
       r: r, m: r * r,
       hp: hp, maxHp: hp,
       flash: 0, entered: false,
+      trait: rollTrait(),
       wobble: Math.random() * Math.PI * 2
     });
   }
@@ -2842,6 +2857,7 @@
       beams[i].life -= 0.05;
       if (beams[i].life <= 0) beams.splice(i, 1);
     }
+    updateShocks();
     chainPulse += 0.075;
     if (shake > 0) shake = Math.max(0, shake - 0.7);
     if (flashOver > 0) flashOver = Math.max(0, flashOver - 0.02);
@@ -2954,6 +2970,9 @@
     // a rope or another shard. This only queues them; nothing re-enters
     // here until the frame steps the list.
     if (c.iced > 0 && !c.boss) shatter(c);
+
+    // A trait fires however the circle died, for the same reason.
+    if (c.trait && TRAITS[c.trait] && !c.boss) TRAITS[c.trait].onPop(c);
 
     // Overload turns a pop into a chain reaction. The guard keeps the
     // cascade in its own queue rather than re-entering here per casualty.
@@ -3508,6 +3527,125 @@
     if (hold.t >= CHARGE_MAX) { hold = null; toast('Charge spent'); }
   }
 
+  // ------------------------------------------------------------- traits --
+  //
+  // A minority of falling circles carry a trait that fires when they pop.
+  // Each is marked by a ring in its own colour AND its own dash pattern --
+  // colour alone would be no use to a player who cannot separate red from
+  // green, and these two change what you should do about the circle.
+  //
+  //   blast   a solid red ring: damages and shoves everything nearby
+  //   seed    a dashed green ring: leaves three smaller circles behind
+  //
+  // One is a reward for popping and the other is a cost, which is the whole
+  // point of marking them: the ring is a decision, not decoration.
+  //
+  var TRAIT_IDS = ['blast', 'seed'];
+
+  var TRAITS = {
+    blast: {
+      id: 'blast', name: 'Blast', ring: '#f8524b', dash: null,
+      onPop: function (c) { blastPop(c); }
+    },
+    seed: {
+      id: 'seed', name: 'Seeder', ring: '#4ade80', dash: 0.30,
+      onPop: function (c) { seedPop(c); }
+    }
+  };
+
+  var shocks = [];           // expanding blast rings, purely decorative
+  var blastDepth = 0;        // one blast can set off the next; this bounds it
+
+  function rollTrait() {
+    if (mode.traits === false) return null;
+    if (Math.random() >= TRAIT_CHANCE) return null;
+    return TRAIT_IDS[(Math.random() * TRAIT_IDS.length) | 0];
+  }
+
+  function blastPop(c) {
+    // A blast can set off another blast, which is the best thing about them,
+    // but the recursion has to stop somewhere.
+    if (blastDepth >= BLAST_MAX_CHAIN) return;
+    blastDepth++;
+
+    var R = c.r * BLAST_RADIUS;
+    shocks.push({ x: c.x, y: c.y, max: R, life: 1 });
+    burst(c.x, c.y, c.r, TRAITS.blast.ring, 22);
+    shake = Math.min(14, 5 + c.r * 0.10);
+    beep(110, 0.26, 'sawtooth', 0.10);
+
+    for (var i = circles.length - 1; i >= 0; i--) {
+      var n = circles[i];
+      var dx = n.x - c.x, dy = n.y - c.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d > R + n.r) continue;
+      if (d < 0.01) { dx = 0; dy = -1; d = 1; }        // dead centre: shove it up
+
+      if (n.boss) { deflect(n); continue; }
+
+      // The shove falls off with distance and is ADDED to whatever the
+      // circle was already doing -- Verlet keeps velocity in the previous
+      // position, so moving px/py by hand is how you push something.
+      var f = BLAST_PUSH * (1 - Math.min(1, d / (R + n.r)));
+      n.px -= (dx / d) * f;
+      n.py -= (dy / d) * f;
+
+      n.hp -= BLAST_DAMAGE;
+      n.flash = 1;
+
+      if (n.hp > 0) {
+        burst(n.x, n.y, n.r * 0.45, TRAITS.blast.ring, 4);
+      } else {
+        var idx = circles.indexOf(n);
+        if (idx >= 0) circles.splice(idx, 1);
+        awardPop(n, false);            // caught in a blast, not tapped
+      }
+    }
+
+    blastDepth--;
+  }
+
+  function seedPop(c) {
+    if (circles.length + SEED_INTO > MAX_CIRCLES) return;
+
+    var rad = Math.max(9, c.r * SEED_SCALE);
+    // Half the parent's number, rounded up, so a seeder is a real cost
+    // without being a wall.
+    var hp = clamp(Math.ceil(c.maxHp / 2), 1, mode.maxHp || MAX_HP);
+
+    for (var i = 0; i < SEED_INTO; i++) {
+      var ang = (i / SEED_INTO) * Math.PI * 2 + c.wobble;
+      // Placed clear of one another rather than stacked. Verlet turns any
+      // separation the solver has to perform into real velocity, so
+      // overlapping children would fling themselves apart.
+      var spread = rad * 1.20;
+      var x = clamp(c.x + Math.cos(ang) * spread, rad, W - rad);
+      var y = c.y + Math.sin(ang) * spread;
+      var kick = gravity > 0 ? 0.5 : 0;
+      circles.push({
+        x: x, y: y,
+        px: x - Math.cos(ang) * kick, py: y - Math.sin(ang) * kick,
+        r: rad, m: rad * rad,
+        hp: hp, maxHp: hp,
+        flash: 1, entered: true,
+        // Children carry no trait of their own. A seeder that seeded seeders
+        // would have no end to it.
+        wobble: Math.random() * Math.PI * 2
+      });
+    }
+
+    burst(c.x, c.y, c.r, TRAITS.seed.ring, 16);
+    beep(360, 0.10, 'square', 0.06);
+    setTimeout(function () { beep(300, 0.14, 'square', 0.05); }, 80);
+  }
+
+  function updateShocks() {
+    for (var i = shocks.length - 1; i >= 0; i--) {
+      shocks[i].life -= 0.055;
+      if (shocks[i].life <= 0) shocks.splice(i, 1);
+    }
+  }
+
   // ---- Ice Shards -----------------------------------------------------
   //
   // Tap a circle and it ices over, pinned where it stands. Pop it and it
@@ -3976,6 +4114,25 @@
         ctx.restore();
       }
 
+      // A trait ring: its own colour AND its own dash, so the two are told
+      // apart by shape as well as hue. It breathes, so a marked circle
+      // catches the eye in a crowded pile.
+      if (c.trait && TRAITS[c.trait]) {
+        var tr = TRAITS[c.trait];
+        var pulse = 0.72 + 0.28 * Math.sin(chainPulse * 1.6 + c.wobble);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r + Math.max(4, r * 0.11), 0, Math.PI * 2);
+        if (tr.dash) {
+          ctx.setLineDash([r * tr.dash, r * tr.dash * 0.6]);
+          ctx.lineDashOffset = -chainPulse * 5;
+        }
+        ctx.lineWidth = Math.max(2.4, r * 0.075);
+        ctx.strokeStyle = rgba(tr.ring, pulse.toFixed(3));
+        ctx.stroke();
+        ctx.restore();
+      }
+
       if (c.flash > 0) {
         ctx.beginPath();
         ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
@@ -4022,6 +4179,21 @@
       }
       ctx.restore();
     }
+
+    // Blast shockwaves: a ring racing outward from where it went off.
+    for (i = 0; i < shocks.length; i++) {
+      var sk = shocks[i];
+      var t = 1 - sk.life;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, sk.life * 0.85);
+      ctx.beginPath();
+      ctx.arc(sk.x, sk.y, sk.max * (0.15 + t * 1.05), 0, Math.PI * 2);
+      ctx.strokeStyle = TRAITS.blast.ring;
+      ctx.lineWidth = 2 + 5 * sk.life;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
 
     // Shards in flight: slivers pointing the way they travel.
     for (i = 0; i < shards.length; i++) {
@@ -4930,9 +5102,10 @@
       total += Math.round(c.maxHp * 10 * (1 + c.r / 120));
       burst(c.x, c.y, c.r, hpColor(c.hp));
       // A bomb scores its own way rather than through awardPop(), so the
-      // shatter has to be repeated here or blasting an icicle would do
-      // nothing.
+      // shatter and the trait have to be repeated here or blasting a marked
+      // circle would do nothing.
       if (c.iced > 0) shatter(c);
+      if (c.trait && TRAITS[c.trait]) TRAITS[c.trait].onPop(c);
     }
 
     record('bestBomb', victims.length);
@@ -6523,6 +6696,7 @@
     fires.length = 0;
     painting = false; lastPaint = null;
     gesture = null; lassoPath = []; beams.length = 0; shards.length = 0;
+    shocks.length = 0; blastDepth = 0;
     hold = null; beatPhase = 0;
     echoLive = false; echoPending = null;
     for (var ck in cool) cool[ck] = 0;
@@ -6854,6 +7028,13 @@
         return hp;
       },
       touching: touching,
+      traits: TRAITS,
+      traitChance: function () { return TRAIT_CHANCE; },
+      traitsOn: function () {
+        return circles.map(function (c) { return c.trait || null; });
+      },
+      setTrait: function (i, t) { if (circles[i]) circles[i].trait = t; },
+      shocks: function () { return shocks.length; },
       achievements: ACHIEVEMENTS,
       achieved: function () { return JSON.parse(JSON.stringify(achieved)); },
       stats: function () { return JSON.parse(JSON.stringify(STATS)); },
