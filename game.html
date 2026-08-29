@@ -739,6 +739,13 @@
   .lcard .lstars { color: var(--gold); letter-spacing: .1em; }
   /* A cleared board keeps its accent even unselected: the panel is a
      checklist, so what is done has to be readable at a glance. */
+  /* An earned theme states its milestone on the card rather than a price. */
+  .tcard.earn .tgoal {
+    font-size: 10px; line-height: 1.35; color: var(--muted);
+    padding: 0 2px; margin-top: 2px;
+  }
+  .tcard .tmeta .goal { font-weight: 800; color: var(--gold); }
+
   .lcard.done { border-color: var(--accent); }
   .lcard .ltick {
     float: right; color: var(--accent); font-weight: 900;
@@ -927,6 +934,14 @@
   }
   .fxcard:hover { border-color: var(--accent); }
   .fxcard.on { border-color: var(--accent); background: rgba(255,255,255,0.07); }
+  /* A locked effect keeps running its sample -- seeing what you are playing
+     for is the whole reason to show it -- but reads as out of reach. */
+  .fxcard.locked { opacity: .5; }
+  .fxcard.locked:hover { border-color: var(--line); }
+  .fxcard .fxlock {
+    font-size: 9px; font-weight: 800; letter-spacing: .06em;
+    color: var(--muted);
+  }
   .fxcard canvas { width: 100%; height: 58px; border-radius: 8px; display: block; }
   .fxcard b { font-size: 11px; font-weight: 800; letter-spacing: .02em; }
   .fxnote {
@@ -2800,6 +2815,7 @@
 
     confetti: {
       id: 'confetti', name: 'Confetti', blurb: 'Paper squares that tumble and drift down.',
+      goal: { stat: 'bestEndlessLevel', need: 50, label: 'Reach level 50 in Endless' },
       spawn: function (x, y, r, color, n) {
         // Party colours, not the circle's own: a single hue reads as debris,
         // a spread reads as celebration. The circle's colour stays in the mix
@@ -2849,6 +2865,7 @@
 
     bubbles: {
       id: 'bubbles', name: 'Bubbles', blurb: 'Soap bubbles that rise, wobble and thin out.',
+      goal: { stat: 'popped', need: 5000, label: 'Pop 5,000 circles' },
       spawn: function (x, y, r, color, n) {
         for (var i = 0; i < n; i++) {
           var a = Math.random() * Math.PI * 2;
@@ -2902,14 +2919,19 @@
   var POPFX_KEY = 'popFx';
   var popFx = POPFX.sparks;
 
+  function fxUnlocked(fx) { return !fx.goal || goalMet(fx.goal); }
+
   function loadPopFx() {
     try {
       var id = localStorage.getItem(POPFX_KEY);
-      if (id && POPFX[id]) popFx = POPFX[id];
+      // Falls back rather than trusting the stored id: counters can be
+      // cleared, and a locked effect must not stay selected because it was
+      // chosen before.
+      if (id && POPFX[id] && fxUnlocked(POPFX[id])) popFx = POPFX[id];
     } catch (e) {}
   }
   function selectPopFx(id) {
-    if (!POPFX[id]) return;
+    if (!POPFX[id] || !fxUnlocked(POPFX[id])) return;
     popFx = POPFX[id];
     try { localStorage.setItem(POPFX_KEY, id); } catch (e) {}
   }
@@ -4785,9 +4807,14 @@
       if (mode.scores !== false) {
         record('bestLevel', level());
         record('bestRun', Math.floor(elapsed));
-        if (mode.id === 'rush') record('bestClock', Math.floor(clock));
+        if (mode.id === 'endless') record('bestEndlessLevel', level());
+        if (mode.id === 'rush') {
+          record('bestClock', Math.floor(clock));
+          record('bestRushRun', Math.floor(elapsed));
+        }
         checkAchievements('level');
         if (mode.paysWithTime) checkAchievements('clock');
+        checkUnlocks();
       }
     }
 
@@ -5411,7 +5438,9 @@
                 '#e879f9', '#f472b6', '#fb7185', '#fb923c', '#facc15']
     },
     {
-      id: 'neon', name: 'Neon Grid', price: 199, dark: true,
+      id: 'neon', name: 'Neon Grid', price: 0, dark: true,
+      goal: { stat: 'bestRushRun', need: 300,
+              label: 'Last 5 minutes in one Rush run', unit: 'time' },
       blurb: 'Black glass and electric magenta. Loud, on purpose.',
       bg: '#07060f', glow: '#2a1042', appTop: '#130a26', appBot: '#06050e',
       panel: '#170e2b', ink: '#f4ecff', muted: '#9c8ab8', faint: '#665579',
@@ -5431,7 +5460,9 @@
                 '#d94f70', '#c2528f', '#9c5aa8', '#7a5fb5', '#5a63b0']
     },
     {
-      id: 'reef', name: 'Deep Reef', price: 199, dark: true,
+      id: 'reef', name: 'Deep Reef', price: 0, dark: true,
+      goal: { stat: 'bestEndlessLevel', need: 30,
+              label: 'Reach level 30 in Endless' },
       blurb: 'Cold teal water with a mint accent.',
       bg: '#041a1f', glow: '#0a4a54', appTop: '#06272e', appBot: '#03151a',
       panel: '#0a2a31', ink: '#dffaff', muted: '#7ba8b0', faint: '#4d757c',
@@ -5475,7 +5506,9 @@
                 '#c93a95', '#e0392b', '#ee6a1f', '#f2a51d', '#c9b021']
     },
     {
-      id: 'vector', name: 'Vector', price: 199, dark: true, flat: true,
+      id: 'vector', name: 'Vector', price: 0, dark: true, flat: true,
+      goal: { stat: 'lifetime', need: 500000,
+              label: 'Score 500,000 across every run' },
       blurb: 'Flat slate and pure pigment. Nothing shaded, nothing lit.',
       bg: '#22232a', glow: '#22232a', appTop: '#2a2b33', appBot: '#2a2b33',
       panel: '#31323b', ink: '#f4f4f7', muted: '#9a9bA6', faint: '#6d6e79',
@@ -5595,9 +5628,19 @@
   function saveOwned() {
     try { localStorage.setItem(OWNED_KEY, JSON.stringify(owned)); } catch (e) {}
   }
-  function isUnlocked(t) { return t.price === 0 || !!owned[t.id]; }
+  function isUnlocked(t) {
+    if (owned[t.id]) return true;             // bought, or granted
+    if (t.goal) return goalMet(t.goal);       // earned by playing, not bought
+    return t.price === 0;
+  }
+
+  // Themes that can still be BOUGHT -- which is not the same as themes that
+  // are locked. The earned ones are deliberately absent: the bundle must not
+  // hand over something the player is supposed to play for.
   function lockedThemes() {
-    return THEMES.filter(function (t) { return !isUnlocked(t); });
+    return THEMES.filter(function (t) {
+      return !t.goal && t.price > 0 && !owned[t.id];
+    });
   }
   function grant(id, via, key) {
     owned[id] = { at: Date.now(), via: via, key: key || null };
@@ -5689,12 +5732,16 @@
       var unlocked = isUnlocked(t);
       var active = t.id === activeTheme.id;
       var meta = active ? '<span class="live">Active</span>'
-               : unlocked ? '<span class="owned">' + (t.price === 0 ? 'Free' : 'Owned') + '</span>'
+               : unlocked ? '<span class="owned">' +
+                   (t.goal ? 'Earned' : t.price === 0 ? 'Free' : 'Owned') + '</span>'
+               : t.goal ? '<span class="goal">' + goalProgress(t.goal) + '</span>'
                : '<span class="price">' + money(t.price) + '</span>';
 
-      html += '<button class="tcard' + (active ? ' active' : '') + '" data-id="' + t.id + '">' +
+      html += '<button class="tcard' + (active ? ' active' : '') +
+              (!unlocked && t.goal ? ' earn' : '') + '" data-id="' + t.id + '">' +
         previewHtml(t) + (unlocked ? '' : LOCK_SVG) +
         '<div class="tname">' + t.name + '</div>' +
+        (!unlocked && t.goal ? '<div class="tgoal">' + t.goal.label + '</div>' : '') +
         '<div class="tmeta">' + meta + '</div>' +
       '</button>';
     }
@@ -5726,7 +5773,9 @@
     var id = card.getAttribute('data-id');
     if (id === 'bundle') { openCheckout('bundle'); return; }
     var t = themeById(id);
-    if (isUnlocked(t)) selectTheme(id); else openCheckout(t);
+    if (isUnlocked(t)) selectTheme(id);
+    else if (t.goal) toast(t.goal.label + '  ·  ' + goalProgress(t.goal));
+    else openCheckout(t);
   });
 
   // ------------------------------------------------------- checkout -----
@@ -6303,6 +6352,88 @@
   modesBtn.addEventListener('click', openModes);
   modesClose.addEventListener('click', closeModes);
 
+  // ------------------------------------------------------------- goals ---
+  //
+  // Some cosmetics are earned by playing rather than bought. A `goal` row on
+  // a theme or a pop effect says which lifetime counter it watches and what
+  // it needs:
+  //
+  //   { stat: 'bestEndlessLevel', need: 30, label: '...', unit: 'time'? }
+  //
+  // Nothing is stored when one is met -- the counters are already persisted,
+  // so the unlock is DERIVED from them and cannot drift out of step with
+  // what the player actually did. The only thing kept is which ones have
+  // been announced, so a milestone is celebrated once and not every second
+  // after it.
+  //
+  var UNLOCK_KEY = 'popUnlockSeen';
+  var announced = {};
+
+  function loadAnnounced() {
+    try { announced = JSON.parse(localStorage.getItem(UNLOCK_KEY) || '{}') || {}; }
+    catch (e) { announced = {}; }
+  }
+  function saveAnnounced() {
+    try { localStorage.setItem(UNLOCK_KEY, JSON.stringify(announced)); } catch (e) {}
+  }
+
+  function goalValue(g) {
+    // `lifetime` is the one counter that lives outside STATS, because it
+    // also drives the ability unlock ladder.
+    return g.stat === 'lifetime' ? lifetime : (STATS[g.stat] || 0);
+  }
+  function goalMet(g) { return goalValue(g) >= g.need; }
+
+  function goalProgress(g) {
+    var have = Math.min(goalValue(g), g.need);
+    if (g.unit !== 'time') return nfmt(have) + ' / ' + nfmt(g.need);
+    // Both sides in the same unit. secsLabel() switches between seconds and
+    // minutes on a round number, so a run at 150 seconds would otherwise
+    // read "150s / 5 min" and leave the player doing the conversion.
+    return clockLabel(have) + ' / ' + clockLabel(g.need);
+  }
+
+  function clockLabel(n) {
+    var m = Math.floor(n / 60), sec = n % 60;
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  // Everything with a goal, in one place, so a new earned cosmetic is a row
+  // on its own table and nothing here.
+  function goalItems() {
+    var out = [], i, id;
+    for (i = 0; i < THEMES.length; i++) {
+      if (THEMES[i].goal) out.push({ key: THEMES[i].id, what: 'theme', it: THEMES[i] });
+    }
+    for (id in POPFX) {
+      if (POPFX[id].goal) out.push({ key: 'fx:' + id, what: 'pop effect', it: POPFX[id] });
+    }
+    return out;
+  }
+
+  // Announced through the achievement queue, which already spaces things out
+  // -- two milestones landing in the same second would otherwise replace
+  // each other in the toast and the player would see only the last.
+  function checkUnlocks() {
+    var items = goalItems(), fresh = false;
+
+    for (var i = 0; i < items.length; i++) {
+      var row = items[i];
+      if (announced[row.key] || !goalMet(row.it.goal)) continue;
+      announced[row.key] = Date.now();
+      fresh = true;
+      achQueue.push({
+        name: row.it.name + ' unlocked',
+        blurb: 'A new ' + row.what + ' — ' +
+               (row.what === 'theme' ? 'pick it under Themes' : 'pick it in Settings')
+      });
+    }
+
+    if (!fresh) return;
+    saveAnnounced();
+    if (!achTimer) announceAchievement();
+  }
+
   // ---- achievements panel ---------------------------------------------
   //
   // Built from the same table the game tests against, so a row cannot exist
@@ -6392,9 +6523,15 @@
     bestChain: 0,     // longest chain
     bestBomb: 0,      // most circles in one blast
     bestIced: 0,      // most circles frozen at once
-    bestLevel: 0,     // furthest Endless level
+    bestLevel: 0,     // furthest level, any mode
     bestClock: 0,     // most seconds banked in Rush
-    bestRun: 0        // longest run, in seconds
+    bestRun: 0,       // longest run, in seconds, any mode
+    // Per-mode, because the milestones that unlock things name a mode and
+    // the two above do not: Rush ticks levels on the same clock Endless
+    // does, so bestLevel alone would hand out an Endless reward for a Rush
+    // run.
+    bestEndlessLevel: 0,
+    bestRushRun: 0
   };
   var achieved = {};
 
@@ -6532,9 +6669,11 @@
       blurb: 'Finish 25 runs.',
       when: 'endRun', test: function () { return STATS.runs >= 25; } },
     { id: 'themeAny', group: 'Milestones', name: 'Redecorated',
-      blurb: 'Play with a theme you bought.',
+      blurb: 'Play with a theme you unlocked.',
       when: 'theme',
-      test: function () { return activeTheme.price > 0 && owned[activeTheme.id]; } }
+      test: function () {
+        return activeTheme.id !== THEMES[0].id && isUnlocked(activeTheme);
+      } }
   ];
 
   var ACH_BY_WHEN = {};
@@ -6613,12 +6752,16 @@
     var ids = Object.keys(POPFX);
     for (var i = 0; i < ids.length; i++) {
       var fx = POPFX[ids[i]];
+      var open = fxUnlocked(fx);
       var card = document.createElement('button');
       card.type = 'button';
-      card.className = 'fxcard' + (fx.id === popFx.id ? ' on' : '');
+      card.className = 'fxcard' + (fx.id === popFx.id ? ' on' : '') + (open ? '' : ' locked');
       card.setAttribute('data-fx', fx.id);
       card.setAttribute('aria-pressed', fx.id === popFx.id ? 'true' : 'false');
-      card.innerHTML = '<canvas></canvas><b>' + fx.name + '</b>';
+      // A locked card keeps its sample running. Seeing the thing you are
+      // playing for is the whole reason to show it at all.
+      card.innerHTML = '<canvas></canvas><b>' + fx.name + '</b>' +
+        (open ? '' : '<span class="fxlock">' + goalProgress(fx.goal) + '</span>');
       fxPick.appendChild(card);
 
       var cv = card.querySelector('canvas');
@@ -6702,6 +6845,11 @@
   fxPick.addEventListener('click', function (e) {
     var card = e.target.closest('.fxcard');
     if (!card) return;
+    var fx = POPFX[card.getAttribute('data-fx')];
+    if (fx && !fxUnlocked(fx)) {
+      toast(fx.goal.label + '  ·  ' + goalProgress(fx.goal));
+      return;
+    }
     selectPopFx(card.getAttribute('data-fx'));
     renderFxPick();
     // A sample of the new choice on the board behind the panel, so the
@@ -6997,6 +7145,7 @@
       saveStats();
       checkAchievements('endRun');
       checkAchievements('score');       // lifetime and unlock-all live here
+      checkUnlocks();                   // the run's last second counts too
     }
     over = true;
     running = false;
@@ -7287,6 +7436,30 @@
       capCreep: function () { return CAP_CREEP; },
       traits: TRAITS,
       traitChance: function () { return TRAIT_CHANCE; },
+      goals: function () {
+        var out = {};
+        var items = [];
+        for (var i = 0; i < THEMES.length; i++) {
+          if (THEMES[i].goal) items.push(['theme:' + THEMES[i].id, THEMES[i]]);
+        }
+        for (var id in POPFX) {
+          if (POPFX[id].goal) items.push(['fx:' + id, POPFX[id]]);
+        }
+        for (var k = 0; k < items.length; k++) {
+          var g = items[k][1].goal;
+          out[items[k][0]] = { stat: g.stat, need: g.need, label: g.label,
+                               have: goalValue(g), met: goalMet(g),
+                               progress: goalProgress(g) };
+        }
+        return out;
+      },
+      themeUnlocked: function (id) { return isUnlocked(themeById(id)); },
+      fxUnlocked: function (id) { return fxUnlocked(POPFX[id]); },
+      buyableThemes: function () {
+        return lockedThemes().map(function (t) { return t.id; });
+      },
+      announced: function () { return JSON.parse(JSON.stringify(announced)); },
+      checkUnlocks: checkUnlocks,
       traitWeights: function () {
         var out = {};
         for (var id in TRAITS) out[id] = TRAITS[id].weight;
@@ -7355,8 +7528,11 @@
   }
 
   loadOwned();
-  loadPopFx();
   loadProgress();
+  loadAnnounced();
+  // After loadProgress(), because a pop effect's lock is derived from the
+  // counters it loads.
+  loadPopFx();
 
   var savedTheme = THEMES[0];
   try {
