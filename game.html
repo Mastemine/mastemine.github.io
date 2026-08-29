@@ -1823,8 +1823,14 @@
   var BASE_MAX = 100;         // starting health
   var TOWER_GRAVITY = 0.5;    // multiple of normal fall speed
 
+  // Abilities are bought with pops here rather than carried as charges, and
+  // priced off the Rush table so one number tunes both: an ability worth ten
+  // seconds of clock is worth ten times this in pops. Deliberately dear
+  // enough to compete with an upgrade rather than sit alongside it.
+  var POPS_PER_SEC = 10;
+
   var CENTER_LEVEL = 20;      // before this, the third turret cannot be bought
-  var CENTER_COST = 2500;     // roughly what maxing the other three costs
+  var CENTER_COST = 3000;     // roughly what maxing the other three costs
 
   var TURRET_R = 30;          // the half-discs on the line
   var TURRET_EVERY = 0.85;    // seconds between shots, per turret
@@ -2407,6 +2413,10 @@
       blurb: 'Guard the base. Anything that gets through costs you.',
       gravity: GRAVITY * TOWER_GRAVITY,
       fallCap: TOWER_GRAVITY,        // half speed, not merely half acceleration
+      // Abilities cost pops and then sit out their ordinary cooldown, so
+      // using one is a real choice against buying an upgrade with the same
+      // pops -- and cannot be spammed the moment it is affordable again.
+      paysWithPops: true,
       spawns: true, nudge: true,
       // Nothing piles up here -- circles are consumed at the base line --
       // so the pile reaching the top is not what kills you. The base
@@ -3298,6 +3308,26 @@
     setTimeout(function () { el.classList.remove('gained'); }, 520);
   }
 
+  // In a pops economy a cooldown is a LOCKOUT, not a refill: it counts down
+  // to zero and the ability simply becomes buyable again.
+  function tickPopCooldowns(dt) {
+    for (var si = 0; si < loadout.length; si++) {
+      var id = loadout[si], a = ABILITIES[id];
+      if (!a) continue;
+      if (a.live()) continue;               // still running: not cooling yet
+      if (!(cool[id] > 0)) continue;
+
+      cool[id] = Math.max(0, cool[id] - dt);
+      if (cool[id] === 0) {
+        updateAbilities();
+        pulseBadge(id);
+        toast(a.name + ' ready');
+        beep(620, 0.10, 'sine', 0.07);
+      }
+    }
+    paintCooldowns();
+  }
+
   function tickCooldowns(dt) {
     for (var si = 0; si < loadout.length; si++) {
       var id = loadout[si], a = ABILITIES[id];
@@ -3329,6 +3359,16 @@
     for (var si = 0; si < loadout.length; si++) {
       var id = loadout[si], a = ABILITIES[id];
       if (!a || !a.cd) continue;
+      if (mode.paysWithPops) {
+        // cool counts DOWN here, so the sweep fills as the lockout expires.
+        var locked = cool[id] > 0 && !a.live();
+        a.cd.style.display = locked ? 'block' : 'none';
+        if (locked) {
+          a.cdFill.style.width =
+            ((1 - cool[id] / (COOLDOWN[id] || 30)) * 100).toFixed(1) + '%';
+        }
+        continue;
+      }
       var running = mode.recharges && !a.noRefill &&
                     a.stock() < START_MAX[id] && !a.live();
       a.cd.style.display = running ? 'block' : 'none';
@@ -3993,6 +4033,9 @@
         } else {
           circles.splice(j, 1);
           awardPop(c, false);               // shot down, not tapped
+          STATS.turretKills++;
+          // Saved on the round numbers rather than a thousand times over.
+          if (STATS.turretKills % 25 === 0) { saveStats(); checkAchievements('tower'); }
         }
         break;
       }
@@ -4050,19 +4093,19 @@
   //
   var TOWER_UPGRADES = [
     {
-      id: 'rate', name: 'Fire Rate', steps: 6, base: 45, growth: 1.62,
+      id: 'rate', name: 'Fire Rate', steps: 6, base: 54, growth: 1.62,
       // Multiplicative, so every tier is worth the same proportion -- a flat
       // subtraction would make the last tier enormous and the first dull.
       value: function (lv) { return TURRET_EVERY * Math.pow(0.86, lv); },
       show: function (lv) { return (1 / this.value(lv)).toFixed(1) + '/s'; }
     },
     {
-      id: 'speed', name: 'Shot Speed', steps: 6, base: 35, growth: 1.58,
+      id: 'speed', name: 'Shot Speed', steps: 6, base: 42, growth: 1.58,
       value: function (lv) { return BULLET_SPEED * (1 + 0.17 * lv); },
       show: function (lv) { return Math.round(this.value(lv) * 60) + 'px/s'; }
     },
     {
-      id: 'damage', name: 'Damage', steps: 4, base: 90, growth: 1.85,
+      id: 'damage', name: 'Damage', steps: 4, base: 108, growth: 1.85,
       value: function (lv) { return TURRET_DAMAGE + lv; },
       show: function (lv) { return '×' + this.value(lv); }
     },
@@ -4109,6 +4152,7 @@
 
   function earnPops(n) {
     pops += n;
+    record('bestPops', pops);
     renderTowerShop();
   }
 
@@ -4126,7 +4170,19 @@
     }
     pops -= cost;
     towerLv[id] = lvOf(id) + 1;
-    if (id === 'center') buildTurrets();      // the third gun appears at once
+    if (id === 'center') { buildTurrets(); record('centerBuilt', 1); }
+
+    // How many of the three LADDERS are finished -- the mid turret is a
+    // one-off purchase, not a ladder, and counting it would make "max
+    // everything" mean something else.
+    var full = 0;
+    for (var q = 0; q < TOWER_UPGRADES.length; q++) {
+      var lu = TOWER_UPGRADES[q];
+      if (lu.steps > 1 && maxed(lu)) full++;
+    }
+    record('maxedUpgrades', full);
+    checkAchievements('tower');
+
     renderTowerShop();
     toast(u.name + '  ' + u.show(lvOf(id)));
     beep(620, 0.09, 'sine', 0.07);
@@ -4168,6 +4224,13 @@
       '</button>';
     }
     tsRow.innerHTML = html;
+
+    // The ability buttons are priced in the same currency, so whatever moved
+    // the balance has to re-evaluate them too. Without this they are set
+    // disabled at the start of the run, when the balance is zero, and
+    // nothing ever turns them back on -- every ability in the mode stays
+    // dead however much you bank.
+    updateAbilities();
   }
 
   function syncTowerShop() {
@@ -5388,7 +5451,8 @@
     // the danger ramp -- so Metronome stays in step with what the player
     // hears, and keeps working when they cannot hear it.
     beatPhase += dt * (BPM / 60);
-    if (mode.recharges) tickCooldowns(dt);
+    if (mode.paysWithPops) tickPopCooldowns(dt);
+    else if (mode.recharges) tickCooldowns(dt);
 
     // One boss per qualifying level, in the modes that actually spawn.
     var lv = level();
@@ -5413,6 +5477,14 @@
         if (mode.id === 'rush') {
           record('bestClock', Math.floor(clock));
           record('bestRushRun', Math.floor(elapsed));
+        }
+        if (mode.id === 'tower') {
+          record('bestTowerLevel', level());
+          record('bestTowerRun', Math.floor(elapsed));
+          // The base never heals, so "still full" can only mean the run has
+          // not been breached yet -- this is simply how far it got clean.
+          if (baseHp >= BASE_MAX) record('flawlessLevel', level());
+          checkAchievements('tower');
         }
         checkAchievements('level');
         if (mode.paysWithTime) checkAchievements('clock');
@@ -5794,11 +5866,16 @@
     return true;
   }
 
+  function abilityPops(id) { return ABILITY_SECS[id] * POPS_PER_SEC; }
+
   function abilityReady(id) {
     var a = ABILITIES[id];
     if (!started || over || paused || a.live()) return false;
     // Priced in seconds, you must be able to afford it and survive it.
     if (mode.paysWithTime) return clock > ABILITY_SECS[id];
+    // Priced in pops, and then locked out for its ordinary cooldown. Here
+    // `cool` counts DOWN as a lockout rather than up toward a refill.
+    if (mode.paysWithPops) return pops >= abilityPops(id) && !(cool[id] > 0);
     return a.stock() > 0;
   }
 
@@ -5859,8 +5936,10 @@
       if (!a || !a.el) continue;
       a.badge.textContent = mode.paysWithTime
         ? (a.live() ? a.label() : ABILITY_SECS[id] + 's')
+        : mode.paysWithPops
+        ? (a.live() ? a.label() : abilityPops(id))
         : a.label();
-      a.el.classList.toggle('priced', !!mode.paysWithTime);
+      a.el.classList.toggle('priced', !!(mode.paysWithTime || mode.paysWithPops));
       a.el.style.display = (a.needsMotion && !mode.spawns) ? 'none' : '';
       a.el.classList.toggle('armed', a.live());
       a.el.disabled = !a.live() && !abilityReady(id);
@@ -5877,8 +5956,16 @@
   function payFor(id) {
     if (mode.paysWithTime) {
       clock = Math.max(0, clock - ABILITY_SECS[id]);
-      floatText(W / 2, 64, '\u2212' + ABILITY_SECS[id] + 's', activeTheme.danger);
+      floatText(W / 2, 64, '−' + ABILITY_SECS[id] + 's', activeTheme.danger);
       return ABILITY_SECS[id] + 's';
+    }
+    if (mode.paysWithPops) {
+      var cost = abilityPops(id);
+      pops = Math.max(0, pops - cost);
+      cool[id] = COOLDOWN[id] || 30;
+      floatText(W / 2, 64, '−' + cost + ' pops', activeTheme.gold);
+      renderTowerShop();
+      return cost + ' pops';
     }
     ABILITIES[id].spend();
     return null;
@@ -5887,8 +5974,15 @@
   // Backing out of an armed ability gives back exactly what arming cost, so
   // changing your mind is always free.
   function refund(id) {
-    if (mode.paysWithTime) clock = Math.min(RUSH_MAX, clock + ABILITY_SECS[id]);
-    else ABILITIES[id].restock();
+    if (mode.paysWithTime) { clock = Math.min(RUSH_MAX, clock + ABILITY_SECS[id]); return; }
+    if (mode.paysWithPops) {
+      // The lockout is lifted too: nothing was actually used.
+      pops += abilityPops(id);
+      cool[id] = 0;
+      renderTowerShop();
+      return;
+    }
+    ABILITIES[id].restock();
   }
 
   function useAbility(id) {
@@ -6853,6 +6947,9 @@
 
     if (mode.paysWithTime) {
       facts.push('Costs ' + ABILITY_SECS[id] + 's');
+    } else if (mode.paysWithPops) {
+      facts.push('Costs ' + abilityPops(id) + ' pops');
+      if (COOLDOWN[id]) facts.push('Locked out ' + secsLabel(COOLDOWN[id]));
     } else {
       facts.push(START_MAX[id] + (START_MAX[id] === 1 ? ' charge' : ' charges'));
       if (a.noRefill) facts.push('Never refills');
@@ -7149,7 +7246,16 @@
     // does, so bestLevel alone would hand out an Endless reward for a Rush
     // run.
     bestEndlessLevel: 0,
-    bestRushRun: 0
+    bestRushRun: 0,
+    // Tower Defence. Its upgrades reset every run, so what is worth
+    // remembering is the best a run ever GOT, not a running total.
+    bestTowerLevel: 0,
+    bestTowerRun: 0,      // seconds
+    flawlessLevel: 0,     // furthest level reached with the base still full
+    maxedUpgrades: 0,     // most of the three ladders finished in one run
+    centerBuilt: 0,       // the third gun, ever
+    bestPops: 0,          // most banked at once
+    turretKills: 0        // circles shot down, lifetime
   };
   var achieved = {};
 
@@ -7275,6 +7381,35 @@
     { id: 'unlockAll', group: 'Abilities', name: 'Fully Equipped',
       blurb: 'Unlock every ability.',
       when: 'score', test: function () { return !nextUnlock(); } },
+
+    // ---- tower defence
+    { id: 'twStand', group: 'Tower Defence', name: 'First Stand',
+      blurb: 'Hold the base for two minutes.',
+      when: 'tower', test: function () { return STATS.bestTowerRun >= 120; } },
+    { id: 'twDug', group: 'Tower Defence', name: 'Dug In',
+      blurb: 'Hold the base for five minutes.',
+      when: 'tower', test: function () { return STATS.bestTowerRun >= 300; } },
+    { id: 'twLv20', group: 'Tower Defence', name: 'Fortified',
+      blurb: 'Reach level 20 in Tower Defence.',
+      when: 'tower', test: function () { return STATS.bestTowerLevel >= 20; } },
+    { id: 'twClean', group: 'Tower Defence', name: 'Not One Through',
+      blurb: 'Reach level 10 without the base losing a point.',
+      when: 'tower', test: function () { return STATS.flawlessLevel >= 10; } },
+    { id: 'twGun', group: 'Tower Defence', name: 'Gunsmith',
+      blurb: 'Max out one turret upgrade in a run.',
+      when: 'tower', test: function () { return STATS.maxedUpgrades >= 1; } },
+    { id: 'twArms', group: 'Tower Defence', name: 'Arms Dealer',
+      blurb: 'Max out fire rate, shot speed and damage in one run.',
+      when: 'tower', test: function () { return STATS.maxedUpgrades >= 3; } },
+    { id: 'twThird', group: 'Tower Defence', name: 'Third Gun',
+      blurb: 'Build the mid turret.',
+      when: 'tower', test: function () { return STATS.centerBuilt >= 1; } },
+    { id: 'twChest', group: 'Tower Defence', name: 'War Chest',
+      blurb: 'Bank 1,500 pops at once without spending them.',
+      when: 'tower', test: function () { return STATS.bestPops >= 1500; } },
+    { id: 'twAuto', group: 'Tower Defence', name: 'Automated',
+      blurb: 'Let the turrets shoot down 1,000 circles.',
+      when: 'tower', test: function () { return STATS.turretKills >= 1000; } },
 
     // ---- volume
     { id: 'pop1k', group: 'Milestones', name: 'Thousand Down',
@@ -7766,6 +7901,7 @@
       saveStats();
       checkAchievements('endRun');
       checkAchievements('score');       // lifetime and unlock-all live here
+      checkAchievements('tower');
       checkUnlocks();                   // the run's last second counts too
     }
     over = true;
@@ -8067,6 +8203,8 @@
       towerLv: function () { return JSON.parse(JSON.stringify(towerLv)); },
       upgradeCost: function (id) { return upgradeCost(upgradeById(id)); },
       upgradeLocked: function (id) { return upgradeLocked(upgradeById(id)); },
+      abilityPops: abilityPops,
+      abilityReady: abilityReady,
       buyUpgrade: buyUpgrade,
       turretStats: function () {
         return { every: +turretEvery().toFixed(3), speed: +bulletSpeed().toFixed(2),
