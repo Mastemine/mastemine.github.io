@@ -1728,6 +1728,22 @@
 
   // ------------------------------------------------------------ constants
   var STEP        = 1 / 60;   // fixed physics timestep (seconds)
+  // Tower Defence constants. These sit ABOVE the MODES table on purpose:
+  // MODES is an object literal evaluated where it stands, and `var` hoists
+  // the declaration without the value -- declared below it, TOWER_GRAVITY
+  // read as undefined, the mode's gravity became NaN, and every circle
+  // failed every comparison against the base line and was swallowed whole.
+  var BASE_FRAC = 0.15;       // of the screen height that is the base
+  var BASE_MAX = 100;         // starting health
+  var TOWER_GRAVITY = 0.5;    // multiple of normal fall speed
+
+  var TURRET_R = 30;          // the half-discs on the line
+  var TURRET_EVERY = 0.85;    // seconds between shots, per turret
+  var TURRET_DAMAGE = 1;
+  var TURRET_RANGE = 1e9;     // the whole board, for now
+  var BULLET_SPEED = 7.2;     // px per frame
+  var BULLET_R = 5;
+
   var GRAVITY     = 0.20;     // px per step^2 -- deliberately gentle
   var DAMPING     = 0.992;    // air drag
   var MAX_FALL    = 4.6;      // terminal velocity, px per step
@@ -2295,6 +2311,35 @@
       onContinue: function () {}
     },
 
+    // A TEST MODE. Everything it needs lives in the tower-defence block and
+    // this row, so it can be pulled back out cleanly if it does not work.
+    tower: {
+      id: 'tower', name: 'Tower Defence',
+      blurb: 'Guard the base. Anything that gets through costs you.',
+      gravity: GRAVITY * TOWER_GRAVITY,
+      fallCap: TOWER_GRAVITY,        // half speed, not merely half acceleration
+      spawns: true, nudge: true,
+      // Nothing piles up here -- circles are consumed at the base line --
+      // so the pile reaching the top is not what kills you. The base
+      // running out is, and updateBase() ends the run itself.
+      topOut: 'ignore',
+      continues: true, tracksBest: true,
+      recharges: true, levelLine: true,
+      hudLabel: 'Base',
+      hudValue: function () { return baseHp; },
+      spawnGap: function () { return Math.max(0.55, 1.60 - elapsed * 0.011); },
+      hpRamp: 90,
+      paysWithTime: false,
+      setup: function () { resetTowers(); },
+      tick: function (dt) {
+        updateTurrets(dt);
+        updateBullets(dt);
+        updateBase(dt);
+      },
+      onPop: function () {},
+      onContinue: function () { resetTowers(); }
+    },
+
     kid: {
       id: 'kid', name: 'Kid Mode',
       blurb: 'Big, slow and gentle. Nothing goes past 3.',
@@ -2735,7 +2780,11 @@
       c = circles[i];
       var vx = (c.x - c.px) * DAMPING;
       var vy = (c.y - c.py) * DAMPING;
-      if (vy > MAX_FALL) vy = MAX_FALL;
+      // Terminal velocity is per mode. Halving gravity alone only halves the
+      // ACCELERATION -- everything still converges on the same top speed, so
+      // a mode that wants slower circles has to lower the ceiling too.
+      var cap = MAX_FALL * (mode.fallCap || 1);
+      if (vy > cap) vy = cap;
       c.px = c.x; c.py = c.y;
       c.x += vx;
       c.y += vy + gravity * gravityScale;
@@ -3731,6 +3780,141 @@
     if (hold.t >= CHARGE_MAX) { hold = null; toast('Charge spent'); }
   }
 
+  // ---------------------------------------------------- tower defence ---
+  //
+  // A TEST MODE, and deliberately self-contained: this block, one row in
+  // MODES, one block in draw(), and the constants below. Nothing else in the
+  // game reads any of it, so pulling it back out is a clean delete.
+  //
+  // The bottom slice of the screen is a base with its own health. Circles
+  // are not something to keep off the floor here -- they are something to
+  // stop before they reach it, and anything that gets through costs the base
+  // its own number. Two turrets sit on the line and fire on their own.
+  //
+  var baseHp = BASE_MAX;
+  var turrets = [];
+  var bullets = [];
+  var baseFlash = 0;          // white-hot when the base is hit
+
+  function baseY() { return H * (1 - BASE_FRAC); }
+
+  function resetTowers() {
+    bullets.length = 0;
+    baseHp = BASE_MAX;
+    baseFlash = 0;
+    // Inset by their own radius: sitting flush against the wall, half the
+    // dome falls off the canvas and they read as quarter-discs.
+    turrets = [
+      { x: TURRET_R, y: baseY(), cool: TURRET_EVERY * 0.5, level: 1 },
+      { x: W - TURRET_R, y: baseY(), cool: TURRET_EVERY, level: 1 }
+    ];
+  }
+
+  // The turrets pick the circle closest to the base rather than the closest
+  // to themselves: what matters is what is about to get through.
+  function turretTarget() {
+    var best = null, bestY = -Infinity;
+    for (var i = 0; i < circles.length; i++) {
+      var c = circles[i];
+      if (c.y > baseY()) continue;          // already past them
+      if (c.y > bestY) { bestY = c.y; best = c; }
+    }
+    return best;
+  }
+
+  function updateTurrets(dt) {
+    var i;
+    for (i = 0; i < turrets.length; i++) {
+      var t = turrets[i];
+      t.y = baseY();                        // both follow a resize
+      t.x = i === 0 ? TURRET_R : W - TURRET_R;
+      t.cool -= dt;
+      if (t.cool > 0) continue;
+
+      var target = turretTarget();
+      if (!target) { t.cool = 0.15; continue; }   // nothing to shoot at yet
+
+      t.cool = TURRET_EVERY;
+      var dx = target.x - t.x, dy = target.y - t.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      if (d > TURRET_RANGE) continue;
+      bullets.push({
+        x: t.x, y: t.y,
+        vx: (dx / d) * BULLET_SPEED, vy: (dy / d) * BULLET_SPEED,
+        life: 3
+      });
+      beep(900, 0.04, 'square', 0.03);
+    }
+  }
+
+  function updateBullets(dt) {
+    var scale = dt * 60;                    // speeds are per frame
+
+    for (var i = bullets.length - 1; i >= 0; i--) {
+      var b = bullets[i];
+      b.life -= dt;
+      b.x += b.vx * scale;
+      b.y += b.vy * scale;
+
+      if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) {
+        bullets.splice(i, 1);
+        continue;
+      }
+
+      for (var j = circles.length - 1; j >= 0; j--) {
+        var c = circles[j];
+        var dx = b.x - c.x, dy = b.y - c.y, rr = c.r + BULLET_R;
+        if (dx * dx + dy * dy > rr * rr) continue;
+
+        bullets.splice(i, 1);
+        if (c.boss) { deflect(c); break; }
+
+        c.hp -= TURRET_DAMAGE;
+        c.flash = Math.max(c.flash, 0.7);
+        if (c.hp > 0) {
+          burst(c.x, c.y, c.r * 0.35, activeTheme.accent, 3);
+        } else {
+          circles.splice(j, 1);
+          awardPop(c, false);               // shot down, not tapped
+        }
+        break;
+      }
+    }
+  }
+
+  // Anything whose centre gets past the line is through: it costs the base
+  // its own number and is gone. Nothing piles up in this mode, so the pile
+  // reaching the top is not the thing that can kill you -- the base running
+  // out is.
+  function updateBase(dt) {
+    var line = baseY();
+
+    for (var i = circles.length - 1; i >= 0; i--) {
+      var c = circles[i];
+      // Written as "not past the line" rather than "past it": a NaN fails
+      // every comparison, and the wrong way round that reads as a breach and
+      // silently eats the board.
+      if (!(c.y >= line)) continue;
+
+      var hit = Math.max(1, c.hp);
+      baseHp -= hit;
+      baseFlash = 1;
+      shake = Math.min(14, 4 + hit * 0.6);
+      circles.splice(i, 1);
+      burst(c.x, line, c.r, C_DANGER, 14);
+      floatText(c.x, line - 18, '−' + hit, C_DANGER);
+      beep(120, 0.22, 'sawtooth', 0.09);
+
+      if (baseHp <= 0) {
+        baseHp = 0;
+        endRun('base');
+        return;
+      }
+    }
+
+    if (baseFlash > 0) baseFlash = Math.max(0, baseFlash - dt * 2.2);
+  }
+
   // ------------------------------------------------------------- traits --
   //
   // A minority of falling circles carry a trait that fires when they pop.
@@ -4601,6 +4785,74 @@
       }
       ctx.globalAlpha = 1;
       ctx.lineCap = 'butt';
+    }
+
+    // The base: its slice of the screen, the line across the top of it, and
+    // the two turrets sitting on that line. Drawn under everything else, so
+    // circles and shots read on top of it.
+    if (mode.id === 'tower') {
+      var by = baseY();
+      ctx.save();
+
+      var bg = ctx.createLinearGradient(0, by, 0, H);
+      bg.addColorStop(0, rgba(activeTheme.accent, (0.10 + baseFlash * 0.30).toFixed(3)));
+      bg.addColorStop(1, rgba(C_DANGER, (0.05 + baseFlash * 0.25).toFixed(3)));
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, by, W, H - by);
+
+      ctx.beginPath();
+      ctx.moveTo(0, by); ctx.lineTo(W, by);
+      ctx.lineWidth = 2 + baseFlash * 3;
+      ctx.strokeStyle = baseFlash > 0.05 ? C_DANGER : activeTheme.accent;
+      ctx.stroke();
+
+      // Health, as a bar along the line and a number beside it.
+      var frac = Math.max(0, baseHp / BASE_MAX);
+      ctx.fillStyle = rgba('#ffffff', 0.12);
+      ctx.fillRect(0, by + 6, W, 5);
+      ctx.fillStyle = frac > 0.35 ? activeTheme.accent : C_DANGER;
+      ctx.fillRect(0, by + 6, W * frac, 5);
+
+      ctx.font = '800 15px Montserrat, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = frac > 0.35 ? activeTheme.ink : C_DANGER;
+      ctx.fillText(baseHp + ' / ' + BASE_MAX, W / 2, by + 30);
+
+      // Turrets: half-discs, flat side on the line, facing up the board.
+      for (i = 0; i < turrets.length; i++) {
+        var tu = turrets[i];
+        var ready = 1 - Math.max(0, Math.min(1, tu.cool / TURRET_EVERY));
+        ctx.beginPath();
+        ctx.arc(tu.x, tu.y, TURRET_R, Math.PI, Math.PI * 2);
+        ctx.closePath();
+        ctx.fillStyle = rgba(activeTheme.accent, (0.45 + 0.45 * ready).toFixed(3));
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = activeTheme.ink;
+        ctx.stroke();
+        // A barrel that fills as it comes back round, so the cadence reads.
+        ctx.beginPath();
+        ctx.arc(tu.x, tu.y, TURRET_R * 0.45, Math.PI, Math.PI + Math.PI * ready);
+        ctx.lineTo(tu.x, tu.y);
+        ctx.closePath();
+        ctx.fillStyle = activeTheme.ink;
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      for (i = 0; i < bullets.length; i++) {
+        var bl = bullets[i];
+        ctx.beginPath();
+        ctx.arc(bl.x, bl.y, BULLET_R, 0, Math.PI * 2);
+        ctx.fillStyle = activeTheme.ink;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(bl.x, bl.y, BULLET_R * 2.1, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(activeTheme.accent, 0.22);
+        ctx.fill();
+      }
     }
 
     // Fire, over the circles it is burning, added rather than blended so
@@ -7204,6 +7456,7 @@
     painting = false; lastPaint = null;
     gesture = null; lassoPath = []; beams.length = 0; shards.length = 0;
     shocks.length = 0; traitDepth = 0;
+    bullets.length = 0; baseHp = BASE_MAX; baseFlash = 0;
     hold = null; beatPhase = 0;
     echoLive = false; echoPending = null;
     for (var ck in cool) cool[ck] = 0;
@@ -7277,9 +7530,9 @@
     }
 
     var left = mode.continues ? continuesLeft() : 0;
-    var cause = reason === 'time'
-      ? 'The clock ran out'
-      : 'The pile reached the top';
+    var cause = reason === 'time' ? 'The clock ran out'
+              : reason === 'base' ? 'The base fell'
+              : 'The pile reached the top';
 
     elTitle.innerHTML = 'Game Over';
     elBlurb.innerHTML = left > 0
@@ -7537,6 +7790,15 @@
       },
       touching: touching,
       hpColor: hpColor,
+      baseHp: function () { return baseHp; },
+      setBaseHp: function (v) { baseHp = v; },
+      baseY: function () { return baseY(); },
+      turrets: function () {
+        return turrets.map(function (t) {
+          return { x: Math.round(t.x), y: Math.round(t.y), cool: +t.cool.toFixed(2) };
+        });
+      },
+      bullets: function () { return bullets.length; },
       hpCeiling: function () { return hpCeiling(); },
       capCreepStart: function () { return capCreepStart(); },
       capCreep: function () { return CAP_CREEP; },
