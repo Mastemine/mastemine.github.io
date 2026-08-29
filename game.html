@@ -737,6 +737,14 @@
     font-variant-numeric: tabular-nums;
   }
   .lcard .lstars { color: var(--gold); letter-spacing: .1em; }
+  /* A cleared board keeps its accent even unselected: the panel is a
+     checklist, so what is done has to be readable at a glance. */
+  .lcard.done { border-color: var(--accent); }
+  .lcard .ltick {
+    float: right; color: var(--accent); font-weight: 900;
+    font-size: 11px; line-height: 1;
+  }
+  #levelTop { padding: 0 4px 4px; }
 
   /* ---------- Settings ---------- */
   #settings {
@@ -1370,6 +1378,7 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
       </button>
     </div>
+    <div id="levelTop"></div>
     <div class="storegrid" id="levelGrid"></div>
   </div>
 
@@ -1512,6 +1521,7 @@
   var levelsEl = document.getElementById('levels');
   var levelsClose=document.getElementById('levelsClose');
   var levelGrid= document.getElementById('levelGrid');
+  var levelTop = document.getElementById('levelTop');
   var helpBtn  = document.getElementById('helpBtn');
   var helpEl   = document.getElementById('help');
   var helpClose= document.getElementById('helpClose');
@@ -2280,8 +2290,64 @@
     { id: 'l11', name: 'Two Nines', taps: 11, grants: { split: 2, lightning: 1 },
       rows: ['9.9'], stars: [3, 1] },
 
-    { id: 'l12', name: 'Finale', taps: 10, grants: { bomb: 1, lightning: 1, doubleTap: 1 },
-      rows: ['.888', '8778', '.888'], stars: [3, 1] }
+    { id: 'l12', name: 'Split Decision', taps: 10, grants: { bomb: 1, lightning: 1, doubleTap: 1 },
+      rows: ['.888', '8778', '.888'], stars: [3, 1] },
+
+    // ---- the second dozen: one board per ability added since ----------
+    //
+    // Everything above is solved by tapping, zapping and blasting. These
+    // teach the abilities that arrived later, one at a time, because a
+    // board that needs two unfamiliar tools at once teaches neither.
+
+    // Ice Shards. Freeze one circle in the middle of a field of ones and pop
+    // it: the shards ice and kill their neighbours, and every one of those
+    // throws six more. Spare taps for whatever the cascade misses -- six
+    // shards fly in six directions, not in a circle.
+    { id: 'l13', name: 'Cold Snap', taps: 7, grants: { iceShards: 1 },
+      rows: ['11111', '11111', '11111'], stars: [5, 3] },
+
+    // Laser Cut. Two straight drags take the top two rows outright; the
+    // last row is a chain of contacts, so Lightning finishes it two at a
+    // time. A drag costs no tap -- the charge is what it spends.
+    { id: 'l14', name: 'Clean Cut', taps: 5, grants: { laser: 2, lightning: 1 },
+      rows: ['2222', '2222', '2222'], stars: [2, 1] },
+
+    // Lasso. Two clumps: the right one is inside the budget as drawn, the
+    // left is one over. Tapping a single circle down closes the gap.
+    { id: 'l15', name: 'Round Up', taps: 4, grants: { lasso: 2 },
+      rows: ['33333.333'], stars: [3, 2] },
+
+    // Charge Shot. Two nines are more than any tap budget can reach, but a
+    // hold does not spend taps at all -- only patience. The third is left
+    // for Double Tap and the budget.
+    { id: 'l16', name: 'Slow Burn', taps: 6, grants: { charge: 2, doubleTap: 1 },
+      rows: ['9.9.9'], stars: [2, 1] },
+
+    // Echo. One bomb, two numbers. Echo keeps the bomb armed after its first
+    // target, so it goes off twice for one charge -- fours, then sixes.
+    { id: 'l17', name: 'Double Vision', taps: 4, grants: { bomb: 1, echo: 1 },
+      rows: ['4.4.4', '.6.6.', '4.4.4'], stars: [2, 1] },
+
+    // Fire Trail. A single row and ten seconds of flame: drag along it and
+    // leave the fire to do the work. Fire deals 1.25 a second, so a two
+    // takes a moment to burn through and the trail outlives the drag.
+    { id: 'l18', name: 'Wildfire', taps: 4, grants: { fire: 1 },
+      rows: ['22222222'], stars: [3, 2] },
+
+    // Laser Cut again, but the line no longer matches a row. A vertical
+    // drag takes a staggered band, so where you put the line is the puzzle
+    // rather than which row you pick.
+    { id: 'l19', name: 'Crosscut', taps: 5, grants: { laser: 2, lightning: 1 },
+      rows: ['2.2.2', '2.2.2', '2.2.2'], stars: [3, 1] },
+
+    // The capstone, and the only board that needs two of the new tools in
+    // sequence. A shard deals one, so an ice cascade dies out against
+    // anything tougher than a 1 -- the field has to be softened before it
+    // will carry. Three laser cuts take every three down to a one; then a
+    // single freeze and a single pop run the whole board.
+    { id: 'l20', name: 'Deep Freeze', taps: 8,
+      grants: { laser: 3, iceShards: 1 },
+      rows: ['33333', '33333', '33333'], stars: [5, 3] }
   ];
 
   function levelById(id) {
@@ -2350,9 +2416,14 @@
     try { localStorage.setItem(PUZZLE_KEY, JSON.stringify(puzzleStars)); } catch (e) {}
   }
 
-  function levelUnlocked(i) {
-    return i === 0 || !!puzzleStars[LEVELS[i - 1].id];
+  // Nothing is locked. The set is a checklist to work through in whatever
+  // order appeals, and what it tracks is how much of it you have finished.
+  function levelsDone() {
+    var n = 0;
+    for (var i = 0; i < LEVELS.length; i++) if (puzzleStars[LEVELS[i].id]) n++;
+    return n;
   }
+  function allLevelsDone() { return levelsDone() >= LEVELS.length; }
 
   function starsFor(lv, tapsLeft) {
     if (tapsLeft >= lv.stars[0]) return 3;
@@ -5301,14 +5372,25 @@
   });
 
   function renderLevels() {
+    var done = levelsDone(), total = LEVELS.length;
+    var pct = (done / total) * 100;
+
+    levelTop.innerHTML =
+      '<div class="lifeline"><span>Completed</span><b>' + done + ' of ' + total + '</b></div>' +
+      '<div class="lifebar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
+      '<div class="slotcount' + (done >= total ? ' full' : '') + '">' +
+        (done >= total ? 'Every board cleared'
+                       : 'Play them in any order \u2014 nothing is locked') +
+      '</div>';
+
     var html = '';
     for (var i = 0; i < LEVELS.length; i++) {
       var lv = LEVELS[i];
-      var open = levelUnlocked(i);
       var got = puzzleStars[lv.id] || 0;
-      html += '<button class="lcard" data-level="' + i + '"' + (open ? '' : ' disabled') + '>' +
-        '<span class="lnum">Level ' + (i + 1) + '</span>' +
-        '<span class="lname">' + (open ? lv.name : 'Locked') + '</span>' +
+      html += '<button class="lcard' + (got ? ' done' : '') + '" data-level="' + i + '">' +
+        '<span class="lnum">Level ' + (i + 1) +
+          (got ? '<span class="ltick" aria-label="Completed">\u2713</span>' : '') + '</span>' +
+        '<span class="lname">' + lv.name + '</span>' +
         '<span class="lmeta"><span>' + lv.taps + ' taps</span>' +
         '<span class="lstars">' + (got ? plainStars(got) : '') + '</span></span>' +
       '</button>';
