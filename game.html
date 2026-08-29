@@ -859,7 +859,71 @@
     padding: 2px 4px 0;
   }
 
-  .menurow { display: flex; gap: 8px; justify-content: center; }
+  /* Four entries do not fit one line on a small phone -- unwrapped this row
+     measured 377px inside a 320px app, quietly clipping the outer buttons. */
+  .menurow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    max-width: 100%;
+  }
+  .menurow .btn-ghost { padding: 12px 20px; }
+  @media (max-width: 400px) {
+    .menurow { gap: 6px; }
+    .menurow .btn-ghost { padding: 11px 14px; font-size: 11px; letter-spacing: .06em; }
+  }
+
+  /* ---------- Help ---------- */
+  #help {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #help.hidden { display: none; }
+
+  .hrow {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 0;
+  }
+  .hrow + .hrow { border-top: 1px solid var(--line); }
+  .hicon {
+    flex: 0 0 30px;
+    height: 30px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    display: grid;
+    place-items: center;
+  }
+  .hicon svg { width: 15px; height: 15px; display: block; }
+  .htext { flex: 1 1 auto; min-width: 0; }
+  .hname { font-size: 12px; font-weight: 800; margin-bottom: 3px; }
+  .hdesc { font-size: 11px; line-height: 1.6; color: var(--muted); }
+  .hmeta {
+    margin-top: 6px;
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .hsection {
+    font-size: 9px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 4px 2px 2px;
+  }
+  .hnote { font-size: 11px; line-height: 1.7; color: var(--muted); }
+  .hnote b { color: var(--ink); font-weight: 700; }
+  .hnote + .hnote { margin-top: 9px; }
 
   @media (prefers-reduced-motion: reduce) {
     .sw, .sw::after { transition: none; }
@@ -1000,6 +1064,7 @@
         <button class="btn btn-ghost" id="modesBtn">Modes</button>
         <button class="btn btn-ghost" id="themesBtn">Themes</button>
         <button class="btn btn-ghost" id="settingsBtn">Settings</button>
+        <button class="btn btn-ghost" id="helpBtn">Help</button>
       </div>
       <div class="hint" id="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
     </div>
@@ -1033,6 +1098,19 @@
       </button>
     </div>
     <div class="setbody" id="modeList"></div>
+  </div>
+
+  <div id="help" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Reference</div>
+        <h2>How to play</h2>
+      </div>
+      <button class="iconbtn" id="helpClose" aria-label="Close help">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="setbody" id="helpBody"></div>
   </div>
 
   <div id="levels" class="hidden">
@@ -1176,6 +1254,10 @@
   var levelsEl = document.getElementById('levels');
   var levelsClose=document.getElementById('levelsClose');
   var levelGrid= document.getElementById('levelGrid');
+  var helpBtn  = document.getElementById('helpBtn');
+  var helpEl   = document.getElementById('help');
+  var helpClose= document.getElementById('helpClose');
+  var helpBody = document.getElementById('helpBody');
   var setEl    = document.getElementById('settings');
   var setClose = document.getElementById('setClose');
   var musicSw  = document.getElementById('musicSw');
@@ -3342,6 +3424,103 @@
     if (!started || over) overlay.classList.remove('hidden');
   });
 
+  // ----------------------------------------------------------- help ----
+  //
+  // Every number below is read from the live tables at render time rather
+  // than written into the prose. These constants get retuned often, and help
+  // text that repeats them by hand is wrong the moment one of them moves.
+  //
+  var ABILITY_WHAT = {
+    bomb: 'Arm it, then tap a circle: every circle showing that same number ' +
+          'is destroyed at once. Aimed, not timed.',
+    doubleTap: 'Every tap takes two off a circle instead of one.',
+    lightning: 'Every tap also deals 1 to each circle touching the one you ' +
+               'tapped, arcing out through the pile.',
+    freeze: 'Everything stops. Nothing falls, nothing new arrives, and the ' +
+            'pile cannot top out. You can still tap.'
+  };
+
+  // 180s is a worse thing to read than 3 min, but 45s is better than 0.75 min.
+  function secsLabel(n) {
+    return (n >= 60 && n % 60 === 0) ? (n / 60) + ' min' : n + 's';
+  }
+
+  function abilityMeta(id) {
+    var a = ABILITIES[id];
+    if (mode.paysWithTime) return 'Costs ' + ABILITY_SECS[id] + 's off the clock';
+
+    var bits = [START_MAX[id] + (START_MAX[id] === 1 ? ' charge' : ' charges') + ' to start'];
+    if (a.kind === 'timed') bits.push('lasts ' + a.secs + 's');
+    if (mode.recharges) bits.push('recharges every ' + secsLabel(COOLDOWN[id]));
+    return bits.join('  \u00b7  ');
+  }
+
+  function renderHelp() {
+    var order = ['bomb', 'doubleTap', 'lightning', 'freeze'];
+    var html = '';
+
+    html += '<div class="hsection">The basics</div><div class="setgroup">' +
+      '<div class="hrow"><div class="htext"><div class="hdesc">' +
+      'Circles fall and pile up. Each one shows how many taps it needs; at ' +
+      '<b>0</b> it pops. Let the pile reach the <b>top</b> and the run ends. ' +
+      'The line sweeping down the screen fills once per level \u2014 when it ' +
+      'lands, the level turns over.' +
+      '</div></div></div></div>';
+
+    html += '<div class="hsection">Abilities</div><div class="setgroup">';
+    for (var i = 0; i < order.length; i++) {
+      var id = order[i], a = ABILITIES[id];
+      if (a.needsMotion && !mode.spawns) continue;
+      html += '<div class="hrow">' +
+        '<div class="hicon">' + ICON[a.icon] + '</div>' +
+        '<div class="htext">' +
+          '<div class="hname">' + a.name + '</div>' +
+          '<div class="hdesc">' + ABILITY_WHAT[id] + '</div>' +
+          '<div class="hmeta">' + abilityMeta(id) + '</div>' +
+        '</div></div>';
+    }
+    html += '</div>';
+
+    if (mode.recharges) {
+      html += '<div class="hsection">Getting more</div><div class="setgroup">' +
+        '<div class="hrow"><div class="htext">' +
+          '<p class="hnote"><b>Bosses pay a bounty.</b> Killing one awards a ' +
+          'random ability, one charge per ' + BOSS_TAPS_PER_CHARGE + ' taps it ' +
+          'took \u2014 so a ' + bossHp(BOSS_EVERY) + '-tap boss pays 1, and a ' +
+          bossHp(BOSS_EVERY * 7) + '-tap boss pays ' +
+          Math.floor(bossHp(BOSS_EVERY * 7) / BOSS_TAPS_PER_CHARGE) + '. ' +
+          'A bounty can take you above what you started with, up to ' +
+          MAX_CHARGES + '.</p>' +
+          '<p class="hnote"><b>The recharge bar</b> under each button refills it ' +
+          'on a timer. Three things to know: it only tops you back up to what ' +
+          'you <b>started</b> with, so bounty surplus is yours to keep; it only ' +
+          'runs while you are <b>below</b> that; and it does not start until an ' +
+          'ability you are <b>currently using</b> has run out.</p>' +
+        '</div></div></div>';
+    }
+
+    html += '<div class="hsection">Worth knowing</div><div class="setgroup">' +
+      '<div class="hrow"><div class="htext">' +
+        '<p class="hnote"><b>Chains.</b> Pop circles that <b>started</b> on the ' +
+        'same number back to back and each is worth more, up to ' +
+        CHAIN_CAP + '\u00d7. A tapped circle no longer shows the number it ' +
+        'started on, so the ones that would continue your chain wear a gold ' +
+        'halo.</p>' +
+        '<p class="hnote"><b>Bosses.</b> One every ' + BOSS_EVERY + ' levels, ' +
+        'needing ' + bossHp(BOSS_EVERY) + ' taps and 5 more each time. The ' +
+        'dashed ring means no ability touches them \u2014 not the bomb, not the ' +
+        'splash, and double tap does not speed them up. Plain taps only.</p>' +
+      '</div></div></div>';
+
+    helpBody.innerHTML = html;
+  }
+
+  function openHelp() { renderHelp(); helpEl.classList.remove('hidden'); }
+  function closeHelp() { helpEl.classList.add('hidden'); }
+
+  helpBtn.addEventListener('click', openHelp);
+  helpClose.addEventListener('click', closeHelp);
+
   modesBtn.addEventListener('click', openModes);
   modesClose.addEventListener('click', closeModes);
 
@@ -3408,7 +3587,8 @@
            !buyPanel.classList.contains('hidden') ||
            !setEl.classList.contains('hidden') ||
            !modesEl.classList.contains('hidden') ||
-           !levelsEl.classList.contains('hidden');
+           !levelsEl.classList.contains('hidden') ||
+           !helpEl.classList.contains('hidden');
   }
 
   // ------------------------------------------------------- rewarded ads
@@ -3753,6 +3933,7 @@
     if (e.key === 'Escape') {
       if (!buyPanel.classList.contains('hidden')) closeCheckout();
       else if (!setEl.classList.contains('hidden')) closeSettings();
+      else if (!helpEl.classList.contains('hidden')) closeHelp();
       else if (!modesEl.classList.contains('hidden')) closeModes();
       else if (!levelsEl.classList.contains('hidden')) closeLevels();
       else if (mode.id === 'puzzle') openLevels();
@@ -3800,6 +3981,7 @@
       clock: function () { return clock; },
       setClock: function (v) { clock = v; },
       openModes: openModes,
+      openHelp: openHelp,
       openLevels: openLevels,
       levels: LEVELS,
       levelHp: levelHp,
