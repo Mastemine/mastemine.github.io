@@ -2171,7 +2171,34 @@
       rows: ['4444', '4444', '4444'], stars: [4, 2] },
 
     { id: 'l6', name: 'Last Word', taps: 12, grants: { bomb: 1, lightning: 1, doubleTap: 1 },
-      rows: ['.5555', '55655', '.5555'], stars: [4, 2] }
+      rows: ['.5555', '55655', '.5555'], stars: [4, 2] },
+
+    // A ring with nothing in the middle: every circle has exactly two
+    // neighbours, so a zap always spends itself three ways.
+    { id: 'l7', name: 'Ring', taps: 8, grants: { lightning: 1 },
+      rows: ['.33', '3.3', '.33'], stars: [2, 1] },
+
+    // One circle touches four others; the far corner touches none of them.
+    { id: 'l8', name: 'Six Pack', taps: 8, grants: { lightning: 1 },
+      rows: ['333', '333'], stars: [2, 1] },
+
+    // Everything is a 1 except the corners, so a single pop runs the whole
+    // board. The 2s survive the wave by exactly one point.
+    { id: 'l9', name: 'Chain Reaction', taps: 6, grants: { overload: 1 },
+      rows: ['2111112', '.11111.', '2111112'], stars: [3, 1] },
+
+    // Numbers deliberately not uniform: a bomb takes the sixes and leaves
+    // the fives, which is the half the double tap is for.
+    { id: 'l10', name: 'Twin Peaks', taps: 10, grants: { bomb: 1, doubleTap: 1 },
+      rows: ['6.6.6', '.5.5.', '6.6.6'], stars: [3, 1] },
+
+    // Nine is unreachable by hand in nine taps. Broken into three threes it
+    // sits in its own splash radius.
+    { id: 'l11', name: 'Two Nines', taps: 11, grants: { split: 2, lightning: 1 },
+      rows: ['9.9'], stars: [3, 1] },
+
+    { id: 'l12', name: 'Finale', taps: 10, grants: { bomb: 1, lightning: 1, doubleTap: 1 },
+      rows: ['.888', '8778', '.888'], stars: [3, 1] }
   ];
 
   function levelById(id) {
@@ -2630,12 +2657,21 @@
     for (var i = 0; i < SPLIT_INTO; i++) {
       var hp = base + (i < extra ? 1 : 0);
       if (hp <= 0) continue;
+      // Placed just clear of each other rather than overlapping. Verlet turns
+      // any separation the solver has to perform into real velocity, and at
+      // zero gravity nothing damps it -- overlapping pieces would coast away
+      // across the board instead of sitting where they were made.
       var ang = (i / SPLIT_INTO) * Math.PI * 2 + target.wobble;
-      var px = clamp(target.x + Math.cos(ang) * rad * 1.05, rad, W - rad);
-      var py = target.y + Math.sin(ang) * rad * 1.05;
+      var spread = rad * 1.20;      // > 2/sqrt(3) apart, so no overlap to resolve
+      var px = clamp(target.x + Math.cos(ang) * spread, rad, W - rad);
+      var py = target.y + Math.sin(ang) * spread;
+      // The outward kick only makes sense where gravity will settle it again.
+      // At zero g nothing damps it, so the pieces would drift off across an
+      // authored Puzzle board and never stop.
+      var kick = gravity > 0 ? 0.6 : 0;
       circles.push({
         x: px, y: py,
-        px: px - Math.cos(ang) * 0.6, py: py - Math.sin(ang) * 0.6,
+        px: px - Math.cos(ang) * kick, py: py - Math.sin(ang) * kick,
         r: rad, m: rad * rad,
         hp: hp, maxHp: hp,
         flash: 1, entered: true,
@@ -3410,6 +3446,9 @@
   var SLOTS = 4;
   var LOADOUT_KEY = 'popLoadout';
   var DEFAULT_LOADOUT = ['bomb', 'doubleTap', 'lightning', 'freeze'];
+  // What the player chose, and what this run is actually carrying. They are
+  // the same everywhere except Puzzle, which hands out its own tools.
+  var playerLoadout = DEFAULT_LOADOUT.slice();
   var loadout = DEFAULT_LOADOUT.slice();
 
   // Cumulative score across every run, which is what gates the pool. Stored
@@ -3519,7 +3558,8 @@
       for (var j = 0; keep.length < SLOTS && j < DEFAULT_LOADOUT.length; j++) {
         if (keep.indexOf(DEFAULT_LOADOUT[j]) < 0) keep.push(DEFAULT_LOADOUT[j]);
       }
-      loadout = keep;
+      playerLoadout = keep;
+      loadout = keep.slice();
     } catch (e) {}
   }
 
@@ -3529,7 +3569,8 @@
       if (ABILITIES[ids[i]] && keep.indexOf(ids[i]) < 0) keep.push(ids[i]);
     }
     if (!keep.length) return false;
-    loadout = keep;
+    playerLoadout = keep;
+    loadout = keep.slice();
 
     // Between runs a newly-picked ability arrives stocked; mid-run it does
     // not, or swapping at the pause screen would be free charges.
@@ -3537,7 +3578,7 @@
       var lid = loadout[k];
       if (!started || over) charges[lid] = START_MAX[lid] || 0;
     }
-    try { localStorage.setItem(LOADOUT_KEY, JSON.stringify(loadout)); } catch (e) {}
+    try { localStorage.setItem(LOADOUT_KEY, JSON.stringify(playerLoadout)); } catch (e) {}
     initAbilities();
     updateAbilities();
     return true;
@@ -4839,6 +4880,19 @@
     gravity = mode.gravity;
     try { localStorage.setItem(MODE_KEY, mode.id); } catch (e) {}
 
+    // Puzzle carries exactly the abilities its level grants -- the buttons are
+    // built from the loadout, so a granted ability with no slot would have no
+    // way to be used and the level would be unsolvable. Elsewhere: the pick.
+    if (mode.id === 'puzzle') {
+      var plv = LEVELS[levelIdx];
+      var given = [];
+      for (var gk in (plv.grants || {})) if (given.length < SLOTS) given.push(gk);
+      loadout = given;
+    } else {
+      loadout = playerLoadout.slice();
+    }
+    initAbilities();
+
     circles.length = 0;
     particles.length = 0;
     floaters.length = 0;
@@ -5149,6 +5203,7 @@
       },
       allCharges: function () { return JSON.parse(JSON.stringify(charges)); },
       loadout: function () { return loadout.slice(); },
+      playerLoadout: function () { return playerLoadout.slice(); },
       setLoadout: setLoadout,
       abilityIds: function () { return Object.keys(ABILITIES); },
       unlockAt: UNLOCK_AT,
