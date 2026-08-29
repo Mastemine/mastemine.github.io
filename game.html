@@ -875,6 +875,84 @@
     .menurow .btn-ghost { padding: 11px 14px; font-size: 11px; letter-spacing: .06em; }
   }
 
+  /* ---------- Loadout ---------- */
+  #loadoutSheet {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #loadoutSheet.hidden { display: none; }
+
+  #loadoutTop {
+    flex: 0 0 auto;
+    padding: 12px 16px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .lifeline {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .lifeline b { color: var(--ink); font-size: 13px; font-weight: 800; }
+  .lifebar {
+    margin-top: 8px;
+    height: 4px;
+    border-radius: 3px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  .lifebar i { display: block; height: 100%; background: var(--accent); }
+  .slotcount { margin-top: 9px; font-size: 10px; letter-spacing: .1em;
+               text-transform: uppercase; color: var(--faint); }
+  .slotcount.full { color: var(--accent); }
+
+  .acard {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 11px;
+    text-align: left;
+    font-family: inherit;
+    color: var(--ink);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .acard:hover:not(:disabled) { background: var(--surface-hi); }
+  .acard:disabled { opacity: .45; cursor: default; }
+  .acard.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .acard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .acard .aico {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    display: grid; place-items: center;
+  }
+  .acard .aico svg { width: 15px; height: 15px; display: block; }
+  .acard.on .aico { border-color: var(--accent); color: var(--accent); }
+  .acard .an { font-size: 12px; font-weight: 800; line-height: 1.2; }
+  .acard .am {
+    font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .acard.on .am { color: var(--accent); }
+  .acard .slotno {
+    position: absolute; top: 8px; right: 9px;
+    font-size: 10px; font-weight: 800; color: var(--accent);
+  }
+
   /* ---------- Help ---------- */
   #help {
     position: absolute;
@@ -1062,6 +1140,7 @@
         <button class="btn btn-ghost" id="modesBtn">Modes</button>
         <button class="btn btn-ghost" id="themesBtn">Themes</button>
         <button class="btn btn-ghost" id="settingsBtn">Settings</button>
+        <button class="btn btn-ghost" id="loadoutBtn">Loadout</button>
         <button class="btn btn-ghost" id="helpBtn">Help</button>
       </div>
       <div class="hint" id="hint">Space = pause &nbsp;&middot;&nbsp; R = restart</div>
@@ -1096,6 +1175,20 @@
       </button>
     </div>
     <div class="setbody" id="modeList"></div>
+  </div>
+
+  <div id="loadoutSheet" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Abilities</div>
+        <h2>Loadout</h2>
+      </div>
+      <button class="iconbtn" id="loadoutClose" aria-label="Close loadout">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div id="loadoutTop"></div>
+    <div class="storegrid" id="loadoutGrid"></div>
   </div>
 
   <div id="help" class="hidden">
@@ -1256,6 +1349,11 @@
   var helpEl   = document.getElementById('help');
   var helpClose= document.getElementById('helpClose');
   var helpBody = document.getElementById('helpBody');
+  var loadoutBtn = document.getElementById('loadoutBtn');
+  var loadoutSheet = document.getElementById('loadoutSheet');
+  var loadoutClose = document.getElementById('loadoutClose');
+  var loadoutTop = document.getElementById('loadoutTop');
+  var loadoutGrid = document.getElementById('loadoutGrid');
   var setEl    = document.getElementById('settings');
   var setClose = document.getElementById('setClose');
   var musicSw  = document.getElementById('musicSw');
@@ -1290,6 +1388,13 @@
     pause: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1.2"/><rect x="9" y="2" width="4" height="12" rx="1.2"/></svg>',
     play:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11a1 1 0 0 0 1.53.85l8.5-5.5a1 1 0 0 0 0-1.7l-8.5-5.5A1 1 0 0 0 4 2.5z"/></svg>',
     sndOn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="M10.4 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.4a6.6 6.6 0 0 1 0 9.2"/></svg>',
+    split: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="4.3" r="2.6"/><circle cx="4.2" cy="11.4" r="2.6"/><circle cx="11.8" cy="11.4" r="2.6"/></svg>',
+    overload:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="1.9" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="4.4"/><circle cx="8" cy="8" r="6.9" opacity=".5"/></svg>',
+    sweep: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3.2v4.2M8 2.4v5M13 3.2v4.2"/><path d="M2 10.4h12"/><path d="M4.4 13.4h7.2"/></svg>',
+    wildcard:'<svg viewBox="0 0 16 16" fill="currentColor"><path d="m8 1.3 1.72 3.9 4.24.4-3.2 2.82.95 4.16L8 10.42 4.29 12.58l.95-4.16-3.2-2.82 4.24-.4z"/></svg>',
+    slowmo:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8.4" r="5.6"/><path d="M8 5.2v3.4l2.3 1.4"/><path d="M6.1 1.5h3.8"/></svg>',
+    fire:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8.6 1.1c.2 2 .9 2.9 1.9 4 1.1 1.2 2.1 2.4 2.1 4.3a4.6 4.6 0 0 1-9.2 0c0-1.4.5-2.3 1.3-3.2.1 1 .7 1.7 1.4 1.7.9 0 1.4-.9 1.2-2.3-.2-1.7 0-3.3 1.3-4.5z"/></svg>',
+    second:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 8a5.4 5.4 0 1 1-1.7-3.9"/><path d="M13.6 1.9v3.4h-3.4"/></svg>',
     freeze:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.4v13.2M2.28 4.7l11.44 6.6M2.28 11.3l11.44-6.6"/><path d="M6.3 3.1 8 4.8l1.7-1.7M6.3 12.9 8 11.2l1.7 1.7"/></svg>',
     bolt:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.4 1.2 3.6 8.7a.55.55 0 0 0 .43.9h2.9l-.9 4.9a.4.4 0 0 0 .72.3l5.8-7.5a.55.55 0 0 0-.43-.9h-2.9l.9-4.9a.4.4 0 0 0-.72-.3z"/></svg>',
     dtap:  '<svg viewBox="0 0 16 16"><text x="8" y="11.6" text-anchor="middle" ' +
@@ -1359,6 +1464,9 @@
   // Gravity is per-mode: Puzzle turns it off so an authored board holds the
   // shape it was drawn in instead of slumping into a pile.
   var gravity = GRAVITY;
+  // Slow Motion scales gravity at step time rather than writing to `gravity`,
+  // which is per-mode and must stay 0 for Puzzle.
+  var gravityScale = 1;
 
   // Rush ---------------------------------------------------------------
   var RUSH_START  = 20;       // seconds on the clock at the whistle
@@ -1375,7 +1483,9 @@
   // In a timed mode abilities are unlimited but bought with the clock, and
   // the pops they cause pay nothing back -- they buy board control, never
   // time. Endless and Puzzle keep counted charges instead.
-  var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 30, freeze: 15 };
+  var ABILITY_SECS = { bomb: 15, doubleTap: 20, lightning: 30, freeze: 15,
+                       split: 10, overload: 25, sweep: 20, wildcard: 20,
+                       slowmo: 15, fire: 25, secondWind: 40 };
 
   // Chain scoring: pop circles that STARTED on the same number back to
   // back and each one is worth a little more. A circle's start value is
@@ -1396,7 +1506,38 @@
   //   * a timer only runs while you are actually below that allowance;
   //   * a timer does not start until the ability has finished being used --
   //     a live Lightning is not cooling down, it is still running.
-  var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 180 };
+  // Second Wind is absent on purpose -- it never recharges. See noRefill.
+  var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 180,
+                   split: 50, overload: 150, sweep: 90, wildcard: 150,
+                   slowmo: 100, fire: 60 };
+
+  // Lifetime score needed to unlock each ability. The starting four are 0.
+  // Second Wind sits far out on its own: one use per run, never refilled.
+  var UNLOCK_AT = {
+    bomb: 0, doubleTap: 0, lightning: 0, freeze: 0,
+    split: 30000, sweep: 80000, overload: 160000,
+    wildcard: 280000, slowmo: 450000, fire: 700000, secondWind: 2000000
+  };
+
+  // Fire: the only ability driven by dragging rather than tapping. Holding
+  // and moving lays down patches of flame that outlive the drag and burn
+  // whatever sits in them.
+  var FIRE_SECS = 10;         // how long you may paint for
+  var FIRE_CHARGES = 3;
+  var FIRE_NODE_LIFE = 3;     // seconds a patch keeps burning after you leave
+  var FIRE_NODE_R = 26;
+  var FIRE_STEP = 13;         // px between patches along the drag
+  var FIRE_MAX_NODES = 160;   // hard cap; old patches drop off the front
+  var FIRE_DPS = 1.25;        // damage per second to anything in the flame
+
+  var SPLIT_INTO = 3;         // pieces a split circle becomes
+  var SPLIT_MIN_HP = 3;       // below this there is nothing worth splitting
+  var OVERLOAD_SECS = 25;
+  var OVERLOAD_MAX_CASCADE = 400;   // hard stop; the cascade is a queue, not recursion
+  var SWEEP_BAND = 1.6;       // multiples of the largest radius, measured off the floor
+  var WILDCARD_SECS = 20;
+  var SLOWMO_SECS = 30;
+  var SLOWMO_SCALE = 0.5;
 
   var BOMB_CHARGES = 3;       // per run
   var FREEZE_CHARGES = 1;     // per run
@@ -1409,12 +1550,14 @@
   var TOUCH_SLOP = 3;         // px of tolerance for "touching"
 
   var DTAP_CHARGES = 2;       // per run
-  var cool = { bomb: 0, doubleTap: 0, lightning: 0, freeze: 0 };
+  var cool = {};              // seeded from ABILITIES alongside charges
   // The allowance the trickle refills up to -- deliberately the run's
   // starting stock, not MAX_CHARGES, so bounty surplus is never topped back
   // up automatically and stays something you earned.
   var START_MAX = { bomb: BOMB_CHARGES, doubleTap: DTAP_CHARGES,
-                    lightning: LIGHT_CHARGES, freeze: FREEZE_CHARGES };
+                    lightning: LIGHT_CHARGES, freeze: FREEZE_CHARGES,
+                    split: 2, overload: 2, sweep: 2,
+                    wildcard: 2, slowmo: 2, fire: FIRE_CHARGES, secondWind: 1 };
   var DTAP_SECS = 30;         // how long double tap lasts
   var DTAP_DAMAGE = 2;        // points knocked off per tap while it runs
   var BOMB_STEP = 0.15;       // bonus per extra circle caught in one blast
@@ -1457,6 +1600,8 @@
   var armed = null;                 // armed ability id, spent on the next tap
   var lastBossLevel = 0;            // so each boss level spawns exactly one
   var arcs = [];                    // live lightning bolts, purely decorative
+  var fires = [];                   // burning patches laid down by Fire Trail
+  var painting = false, lastPaint = null;
   var spawnTimer = 0, dangerTimer = 0, dangerGlow = 0;
   var shake = 0, flashOver = 0, chainPulse = 0;
   var running = false, over = false, paused = false, started = false;
@@ -1786,10 +1931,12 @@
         puzzleWon = false;
         taps = lv.taps;
         buildLevel(lv);
-        charges.bomb = (lv.grants && lv.grants.bomb) || 0;
-        charges.doubleTap = (lv.grants && lv.grants.doubleTap) || 0;
-        charges.lightning = (lv.grants && lv.grants.lightning) || 0;
-        charges.freeze = 0;                     // nothing moves in Puzzle
+        // A puzzle hands out exactly what its solution needs, so everything
+        // starts at zero regardless of the loadout the player brought.
+        for (var pid in charges) charges[pid] = 0;
+        if (lv.grants) {
+          for (var gid in lv.grants) charges[gid] = lv.grants[gid];
+        }
       },
       tick: function () {
         if (puzzleWon) return;
@@ -2018,7 +2165,7 @@
       if (vy > MAX_FALL) vy = MAX_FALL;
       c.px = c.x; c.py = c.y;
       c.x += vx;
-      c.y += vy + gravity;
+      c.y += vy + gravity * gravityScale;
       if (!c.entered && c.y - c.r > 2) c.entered = true;
       if (c.flash > 0) c.flash = Math.max(0, c.flash - 0.09);
     }
@@ -2135,6 +2282,7 @@
     }
 
     if (armed === 'bomb') { detonate(hit); return; }
+    if (armed === 'split') { doSplit(hit); return; }
 
     // Snapshot the contacts before anything moves or dies, so the zap hits
     // what was actually touching at the moment of the tap.
@@ -2171,7 +2319,12 @@
     var mult = 1;
 
     if (chained) {
-      if (c.maxHp === chainVal) chainLen++;
+      // Wildcard makes every pop count as a link, whatever it started on.
+      if (timeLeft.wildcard > 0) {
+        if (chainLen < 1) chainVal = c.maxHp;
+        chainLen++;
+      }
+      else if (c.maxHp === chainVal) chainLen++;
       else { chainVal = c.maxHp; chainLen = 1; }
       updateChain();
       mult = Math.min(CHAIN_CAP, 1 + CHAIN_STEP * (chainLen - 1));
@@ -2191,6 +2344,10 @@
     burst(c.x, c.y, c.r, hpColor(c.maxHp));
     mode.onPop(c, gain, chained);
 
+    // Overload turns a pop into a chain reaction. The guard keeps the
+    // cascade in its own queue rather than re-entering here per casualty.
+    if (!inOverload && timeLeft.overload > 0 && !c.boss) overloadFrom(c);
+
     // Killing a boss funds the next stretch. Charge-based modes only: Rush
     // prices abilities in seconds, and already pays a boss its own number.
     if (c.boss && !mode.paysWithTime) bossBounty(c);
@@ -2206,6 +2363,7 @@
       var id = loadout[si], a = ABILITIES[id];
       if (!a) continue;
       if (a.needsMotion && !mode.spawns) continue;   // not offered in this mode
+      if (a.noRefill) continue;                      // never replenished, by design
       if (a.stock() < MAX_CHARGES) pool.push(id);
     }
     if (!pool.length) return null;
@@ -2226,7 +2384,7 @@
   function tickCooldowns(dt) {
     for (var si = 0; si < loadout.length; si++) {
       var id = loadout[si], a = ABILITIES[id];
-      if (!a) continue;
+      if (!a || a.noRefill) continue;
 
       // At or above the starting allowance there is nothing to trickle back,
       // so the timer sits at zero rather than banking progress.
@@ -2254,10 +2412,197 @@
     for (var si = 0; si < loadout.length; si++) {
       var id = loadout[si], a = ABILITIES[id];
       if (!a || !a.cd) continue;
-      var running = mode.recharges && a.stock() < START_MAX[id] && !a.live();
+      var running = mode.recharges && !a.noRefill &&
+                    a.stock() < START_MAX[id] && !a.live();
       a.cd.style.display = running ? 'block' : 'none';
       if (running) a.cdFill.style.width = (cool[id] / COOLDOWN[id] * 100).toFixed(1) + '%';
     }
+  }
+
+  // ---- Split ----------------------------------------------------------
+  function doSplit(target) {
+    if (target.boss) {
+      deflect(target);
+      toast('Bosses cannot be split');
+      refund('split'); armed = null; updateAbilities();
+      return;
+    }
+    if (target.hp < SPLIT_MIN_HP || circles.length + SPLIT_INTO > MAX_CIRCLES) {
+      toast(target.hp < SPLIT_MIN_HP ? 'Too small to split' : 'No room to split');
+      refund('split'); armed = null; updateAbilities();
+      return;
+    }
+
+    var idx = circles.indexOf(target);
+    if (idx >= 0) circles.splice(idx, 1);
+
+    var base = Math.floor(target.hp / SPLIT_INTO);
+    var extra = target.hp - base * SPLIT_INTO;
+    // Equal area across the pieces would be r/sqrt(3); a shade under that
+    // leaves them room to separate instead of exploding apart.
+    var rad = Math.max(12, target.r * 0.56);
+
+    for (var i = 0; i < SPLIT_INTO; i++) {
+      var hp = base + (i < extra ? 1 : 0);
+      if (hp <= 0) continue;
+      var ang = (i / SPLIT_INTO) * Math.PI * 2 + target.wobble;
+      var px = clamp(target.x + Math.cos(ang) * rad * 1.05, rad, W - rad);
+      var py = target.y + Math.sin(ang) * rad * 1.05;
+      circles.push({
+        x: px, y: py,
+        px: px - Math.cos(ang) * 0.6, py: py - Math.sin(ang) * 0.6,
+        r: rad, m: rad * rad,
+        hp: hp, maxHp: hp,
+        flash: 1, entered: true,
+        wobble: Math.random() * Math.PI * 2
+      });
+    }
+
+    burst(target.x, target.y, target.r, hpColor(target.maxHp));
+    shake = Math.min(8, 2 + target.r * 0.06);
+    armed = null;
+    updateAbilities();
+    beep(430, 0.10, 'square', 0.07);
+    setTimeout(function () { beep(620, 0.12, 'square', 0.06); }, 80);
+  }
+
+  // ---- Overload -------------------------------------------------------
+  // A pop damages its neighbours, and anything that dies from that damages
+  // its own. Run as a queue with a hard budget rather than recursion: a
+  // dense pile would otherwise nest hundreds of frames deep and blow the
+  // stack. inOverload stops awardPop() re-entering this while it drains.
+  var inOverload = false;
+
+  function overloadFrom(origin) {
+    inOverload = true;
+    var queue = [origin], guard = 0;
+
+    while (queue.length && guard < OVERLOAD_MAX_CASCADE) {
+      var src = queue.shift();
+      var contacts = touching(src);
+
+      for (var i = 0; i < contacts.length; i++) {
+        guard++;
+        var n = contacts[i];
+        if (n.boss) { deflect(n); continue; }
+
+        var idx = circles.indexOf(n);
+        if (idx < 0) continue;
+
+        n.hp -= 1;
+        n.flash = Math.max(n.flash, 0.75);
+        arcs.push({ pts: bolt(src.x, src.y, n.x, n.y), life: 0.8 });
+
+        if (n.hp > 0) {
+          burst(n.x, n.y, n.r * 0.45, activeTheme.accent, 4);
+        } else {
+          circles.splice(idx, 1);
+          awardPop(n, false);
+          queue.push(n);
+        }
+      }
+    }
+
+    inOverload = false;
+  }
+
+  // ---- Fire Trail -----------------------------------------------------
+  function addFire(x, y) {
+    if (fires.length >= FIRE_MAX_NODES) fires.shift();
+    fires.push({ x: x, y: y, r: FIRE_NODE_R * rand(0.85, 1.15),
+                 life: 1, seed: Math.random() * 6.28 });
+  }
+
+  // Interpolate along the drag: a fast swipe between two frames would
+  // otherwise leave a dotted line instead of a trail.
+  function paintFire(x, y) {
+    if (!(timeLeft.fire > 0)) return;
+    if (!lastPaint) { addFire(x, y); lastPaint = { x: x, y: y }; return; }
+
+    var dx = x - lastPaint.x, dy = y - lastPaint.y;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d < FIRE_STEP) return;
+
+    var steps = Math.min(14, Math.floor(d / FIRE_STEP));
+    for (var i = 1; i <= steps; i++) {
+      addFire(lastPaint.x + dx * (i / steps), lastPaint.y + dy * (i / steps));
+    }
+    lastPaint = { x: x, y: y };
+  }
+
+  function updateFire(dt) {
+    var i, j;
+
+    for (i = fires.length - 1; i >= 0; i--) {
+      fires[i].life -= dt / FIRE_NODE_LIFE;
+      if (fires[i].life <= 0) fires.splice(i, 1);
+    }
+    if (!fires.length || !circles.length) return;
+
+    for (i = circles.length - 1; i >= 0; i--) {
+      var c = circles[i];
+      if (c.boss) continue;               // bosses shrug off every ability
+
+      var inFlame = false;
+      for (j = 0; j < fires.length; j++) {
+        var f = fires[j];
+        var dx = c.x - f.x, dy = c.y - f.y, rr = c.r + f.r * 0.8;
+        if (dx * dx + dy * dy <= rr * rr) { inFlame = true; break; }
+      }
+      if (!inFlame) { c.burn = 0; continue; }
+
+      c.burn = (c.burn || 0) + dt * FIRE_DPS;
+      if (c.burn < 1) continue;
+
+      c.burn -= 1;
+      c.hp -= 1;
+      c.flash = Math.max(c.flash, 0.6);
+
+      if (c.hp > 0) {
+        burst(c.x, c.y - c.r * 0.3, c.r * 0.32, '#ff9d2e', 3);
+      } else {
+        circles.splice(i, 1);
+        awardPop(c, false);               // burned, not tapped: no chain
+      }
+    }
+  }
+
+  // ---- Sweep ----------------------------------------------------------
+  function doSweep() {
+    var band = radiusRange().max * SWEEP_BAND;
+    var cut = H - band, taken = 0, i;
+
+    for (i = circles.length - 1; i >= 0; i--) {
+      var c = circles[i];
+      if (c.boss || c.y < cut) continue;
+      circles.splice(i, 1);
+      awardPop(c, false);
+      taken++;
+    }
+
+    if (!taken) { toast('Nothing down there'); return; }
+    shake = Math.min(13, 4 + taken * 0.9);
+    beep(180, 0.28, 'sawtooth', 0.09);
+  }
+
+  // ---- Second Wind ----------------------------------------------------
+  function doSecondWind() {
+    var refilled = 0;
+    for (var i = 0; i < loadout.length; i++) {
+      var id = loadout[i];
+      if (id === 'secondWind' || !ABILITIES[id]) continue;
+      if ((charges[id] || 0) < START_MAX[id]) {
+        charges[id] = START_MAX[id];
+        cool[id] = 0;
+        pulseBadge(id);
+        refilled++;
+      }
+    }
+    updateAbilities();
+    toast(refilled ? 'Refilled ' + refilled + ' abilit' + (refilled === 1 ? 'y' : 'ies')
+                   : 'Nothing to refill');
+    beep(560, 0.12, 'sine', 0.09);
+    setTimeout(function () { beep(840, 0.18, 'sine', 0.08); }, 100);
   }
 
   function bossBounty(c) {
@@ -2350,12 +2695,34 @@
     }
   }
 
+  function localPoint(e) {
+    var rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
   wrap.addEventListener('pointerdown', function (e) {
     e.preventDefault();
     initAudio();
-    var rect = canvas.getBoundingClientRect();
-    tapAt(e.clientX - rect.left, e.clientY - rect.top);
+    var pt = localPoint(e);
+    // Tapping keeps working while Fire is lit -- losing it for ten seconds
+    // would be a downgrade, so a drag paints *in addition* to the tap.
+    tapAt(pt.x, pt.y);
+    painting = true;
+    lastPaint = null;
+    paintFire(pt.x, pt.y);
   });
+
+  wrap.addEventListener('pointermove', function (e) {
+    if (!painting || !(timeLeft.fire > 0)) return;
+    e.preventDefault();
+    var pt = localPoint(e);
+    paintFire(pt.x, pt.y);
+  });
+
+  function stopPainting() { painting = false; lastPaint = null; }
+  wrap.addEventListener('pointerup', stopPainting);
+  wrap.addEventListener('pointercancel', stopPainting);
+  wrap.addEventListener('pointerleave', stopPainting);
   wrap.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   // ----------------------------------------------------------- draw frame
@@ -2512,6 +2879,28 @@
       ctx.lineCap = 'butt';
     }
 
+    // Fire, over the circles it is burning, added rather than blended so
+    // overlapping patches build into a hotter core.
+    if (fires.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (i = 0; i < fires.length; i++) {
+        var fr = fires[i];
+        var ft = Math.max(0, Math.min(1, fr.life));
+        var flick = 0.78 + 0.22 * Math.sin(chainPulse * 3 + fr.seed);
+        var frr = fr.r * (0.55 + 0.45 * ft) * flick;
+        var fg = ctx.createRadialGradient(fr.x, fr.y, 0, fr.x, fr.y, frr);
+        fg.addColorStop(0, rgba('#fff1c9', (0.50 * ft).toFixed(3)));
+        fg.addColorStop(0.45, rgba('#ff9d2e', (0.34 * ft).toFixed(3)));
+        fg.addColorStop(1, rgba('#ff3b1f', 0));
+        ctx.fillStyle = fg;
+        ctx.beginPath();
+        ctx.arc(fr.x, fr.y, frr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     // Particles.
     for (i = 0; i < particles.length; i++) {
       var p = particles[i];
@@ -2600,7 +2989,7 @@
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
         spawnCircle();
-        spawnTimer = mode.spawnGap();
+        spawnTimer = mode.spawnGap() * (timeLeft.slowmo > 0 ? 2 : 1);
       }
     }
 
@@ -2610,22 +2999,23 @@
     // The buff clock only advances during live play: update() is not called
     // while paused, on the game-over screen, or behind the store.
     var ticked = false;
-    if (timeLeft.doubleTap > 0) {
-      timeLeft.doubleTap = Math.max(0, timeLeft.doubleTap - dt);
+    for (var si = 0; si < loadout.length; si++) {
+      var aid = loadout[si], ab = ABILITIES[aid];
+      if (!ab || ab.kind !== 'timed' || !(timeLeft[aid] > 0)) continue;
+      timeLeft[aid] = Math.max(0, timeLeft[aid] - dt);
       ticked = true;
-      if (timeLeft.doubleTap === 0) { toast(ABILITIES.doubleTap.done); beep(240, 0.20, 'triangle', 0.06); }
-    }
-    if (timeLeft.lightning > 0) {
-      timeLeft.lightning = Math.max(0, timeLeft.lightning - dt);
-      ticked = true;
-      if (timeLeft.lightning === 0) { toast(ABILITIES.lightning.done); beep(240, 0.20, 'triangle', 0.06); }
-    }
-    if (timeLeft.freeze > 0) {
-      timeLeft.freeze = Math.max(0, timeLeft.freeze - dt);
-      ticked = true;
-      if (timeLeft.freeze === 0) { toast(ABILITIES.freeze.done); beep(300, 0.22, 'triangle', 0.06); }
+      if (timeLeft[aid] === 0) {
+        toast(ab.done);
+        beep(aid === 'freeze' ? 300 : 240, 0.21, 'triangle', 0.06);
+      }
     }
     if (ticked) updateAbilities();
+
+    // Slow Motion is read from its timer rather than latched on and off, so
+    // it can never leave the world at half speed if a run ends mid-effect.
+    gravityScale = timeLeft.slowmo > 0 ? SLOWMO_SCALE : 1;
+
+    updateFire(dt);
     if (mode.recharges) tickCooldowns(dt);
 
     // One boss per qualifying level, in the modes that actually spawn.
@@ -2731,34 +3121,17 @@
     bomb: {
       name: 'Bomb', kind: 'targeted', icon: 'bomb', el: null, badge: null,
       hint: 'Tap a circle to blast its number',
-      stock: function () { return charges.bomb; },
-      spend: function () { charges.bomb--; },
-      restock: function () { charges.bomb++; },
-      live:  function () { return armed === 'bomb'; },
-      label: function () { return charges.bomb; }
     },
     doubleTap: {
       name: 'Double Tap', kind: 'timed', icon: 'dtap', el: null, badge: null,
       hint: 'Every tap counts double for ' + DTAP_SECS + 's',
-      stock: function () { return charges.doubleTap; },
-      spend: function () { charges.doubleTap--; },
-      restock: function () { charges.doubleTap++; },
-      live:  function () { return timeLeft.doubleTap > 0; },
-      label: function () { return timeLeft.doubleTap > 0 ? Math.ceil(timeLeft.doubleTap) : charges.doubleTap; },
-      start: function () { timeLeft.doubleTap = DTAP_SECS; },
-      secs: DTAP_SECS, time: function () { return timeLeft.doubleTap; }, bar: 'var(--gold)',
+      secs: DTAP_SECS, bar: 'var(--gold)',
       done: 'Double tap over'
     },
     lightning: {
       name: 'Lightning Touch', kind: 'timed', icon: 'bolt', el: null, badge: null,
       hint: 'Taps also zap whatever is touching, for ' + LIGHT_SECS + 's',
-      stock: function () { return charges.lightning; },
-      spend: function () { charges.lightning--; },
-      restock: function () { charges.lightning++; },
-      live:  function () { return timeLeft.lightning > 0; },
-      label: function () { return timeLeft.lightning > 0 ? Math.ceil(timeLeft.lightning) : charges.lightning; },
-      start: function () { timeLeft.lightning = LIGHT_SECS; },
-      secs: LIGHT_SECS, time: function () { return timeLeft.lightning; }, bar: 'var(--accent)',
+      secs: LIGHT_SECS, bar: 'var(--accent)',
       done: 'Lightning touch over'
     },
     freeze: {
@@ -2767,25 +3140,144 @@
       // the button is hidden there rather than offered and useless.
       needsMotion: true,
       hint: 'Everything stops for ' + FREEZE_SECS + 's',
-      stock: function () { return charges.freeze; },
-      spend: function () { charges.freeze--; },
-      restock: function () { charges.freeze++; },
-      live:  function () { return timeLeft.freeze > 0; },
-      label: function () { return timeLeft.freeze > 0 ? Math.ceil(timeLeft.freeze) : charges.freeze; },
-      start: function () { timeLeft.freeze = FREEZE_SECS; },
-      secs: FREEZE_SECS, time: function () { return timeLeft.freeze; }, bar: ICE,
+      secs: FREEZE_SECS, bar: ICE,
       done: 'Thawed'
+    },
+
+    split: {
+      name: 'Split', kind: 'targeted', icon: 'split', el: null, badge: null,
+      needsMotion: true,
+      hint: 'Tap a circle to break it into ' + SPLIT_INTO + ' smaller ones'
+    },
+    overload: {
+      name: 'Overload', kind: 'timed', icon: 'overload', el: null, badge: null,
+      needsMotion: true,
+      hint: 'Pops set off their neighbours for ' + OVERLOAD_SECS + 's',
+      secs: OVERLOAD_SECS, bar: 'var(--accent)', done: 'Overload over'
+    },
+    sweep: {
+      name: 'Sweep', kind: 'instant', icon: 'sweep', el: null, badge: null,
+      needsMotion: true,
+      hint: 'Clears the bottom of the pile'
+    },
+    wildcard: {
+      name: 'Wildcard', kind: 'timed', icon: 'wildcard', el: null, badge: null,
+      hint: 'Every pop chains for ' + WILDCARD_SECS + 's',
+      secs: WILDCARD_SECS, bar: 'var(--gold)', done: 'Wildcard over'
+    },
+    slowmo: {
+      name: 'Slow Motion', kind: 'timed', icon: 'slowmo', el: null, badge: null,
+      needsMotion: true,
+      hint: 'Half speed for ' + SLOWMO_SECS + 's',
+      secs: SLOWMO_SECS, bar: ICE, done: 'Back to speed'
+    },
+    fire: {
+      name: 'Fire Trail', kind: 'timed', icon: 'fire', el: null, badge: null,
+      hint: 'Hold and drag to lay fire for ' + FIRE_SECS + 's',
+      secs: FIRE_SECS, bar: '#ff9d2e', done: 'Fire out'
+    },
+    secondWind: {
+      name: 'Second Wind', kind: 'instant', icon: 'second', el: null, badge: null,
+      // One per run, full stop: no cooldown, and the boss bounty will not
+      // hand it back either. Powerful enough that finding it twice in a run
+      // would flatten every other decision.
+      noRefill: true,
+      hint: 'Refills your other abilities. Once per run'
     }
   };
 
+  // Charges, timers and the live/label readouts are identical for every
+  // ability, so they are generated rather than written out ten times.
+  (function defineAbilities() {
+    for (var id in ABILITIES) {
+      (function (key, a) {
+        a.id = key;
+        a.stock   = function () { return charges[key] || 0; };
+        a.spend   = function () { charges[key] = Math.max(0, (charges[key] || 0) - 1); };
+        a.restock = function () { charges[key] = (charges[key] || 0) + 1; };
+        a.live    = function () {
+          return a.kind === 'timed' ? (timeLeft[key] || 0) > 0 : armed === key;
+        };
+        a.label   = function () {
+          return (a.kind === 'timed' && (timeLeft[key] || 0) > 0)
+            ? Math.ceil(timeLeft[key]) : (charges[key] || 0);
+        };
+        a.time    = function () { return timeLeft[key] || 0; };
+        a.start   = function () { timeLeft[key] = a.secs; };
+      })(id, ABILITIES[id]);
+    }
+  })();
+
   // Seed both maps from the table, so adding an ability needs no new state.
-  for (var _aid in ABILITIES) { charges[_aid] = 0; timeLeft[_aid] = 0; }
+  for (var _aid in ABILITIES) { charges[_aid] = 0; timeLeft[_aid] = 0; cool[_aid] = 0; }
 
   // The four the player takes into a run. Buttons are built from this, so the
   // HUD stays the same size however large the pool grows.
   var SLOTS = 4;
   var LOADOUT_KEY = 'popLoadout';
-  var loadout = ['bomb', 'doubleTap', 'lightning', 'freeze'];
+  var DEFAULT_LOADOUT = ['bomb', 'doubleTap', 'lightning', 'freeze'];
+  var loadout = DEFAULT_LOADOUT.slice();
+
+  // Cumulative score across every run, which is what gates the pool. Stored
+  // locally, so like the theme purchases it is per-device and forgeable --
+  // an accepted trade for a single-player game with no backend.
+  var LIFE_KEY = 'popLifetime';
+  var lifetime = 0;
+  try { lifetime = parseInt(localStorage.getItem(LIFE_KEY) || '0', 10) || 0; } catch (e) {}
+
+  function addLifetime(n) {
+    if (!n || n < 0) return;
+    lifetime += n;
+    try { localStorage.setItem(LIFE_KEY, String(lifetime)); } catch (e) {}
+  }
+
+  function unlocked(id) { return lifetime >= (UNLOCK_AT[id] || 0); }
+
+  function nextUnlock() {
+    var best = null;
+    for (var id in ABILITIES) {
+      var need = UNLOCK_AT[id] || 0;
+      if (need <= lifetime) continue;
+      if (!best || need < best.need) best = { id: id, need: need };
+    }
+    return best;
+  }
+
+  function loadLoadout() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(LOADOUT_KEY) || 'null');
+      if (!raw || !raw.length) return;
+      var keep = [];
+      for (var i = 0; i < raw.length && keep.length < SLOTS; i++) {
+        if (ABILITIES[raw[i]] && unlocked(raw[i]) && keep.indexOf(raw[i]) < 0) keep.push(raw[i]);
+      }
+      // Backfill from the defaults if a stored id has since disappeared.
+      for (var j = 0; keep.length < SLOTS && j < DEFAULT_LOADOUT.length; j++) {
+        if (keep.indexOf(DEFAULT_LOADOUT[j]) < 0) keep.push(DEFAULT_LOADOUT[j]);
+      }
+      loadout = keep;
+    } catch (e) {}
+  }
+
+  function setLoadout(ids) {
+    var keep = [];
+    for (var i = 0; i < ids.length && keep.length < SLOTS; i++) {
+      if (ABILITIES[ids[i]] && keep.indexOf(ids[i]) < 0) keep.push(ids[i]);
+    }
+    if (!keep.length) return false;
+    loadout = keep;
+
+    // Between runs a newly-picked ability arrives stocked; mid-run it does
+    // not, or swapping at the pause screen would be free charges.
+    for (var k = 0; k < loadout.length; k++) {
+      var lid = loadout[k];
+      if (!started || over) charges[lid] = START_MAX[lid] || 0;
+    }
+    try { localStorage.setItem(LOADOUT_KEY, JSON.stringify(loadout)); } catch (e) {}
+    initAbilities();
+    updateAbilities();
+    return true;
+  }
 
   function abilityReady(id) {
     var a = ABILITIES[id];
@@ -2886,6 +3378,16 @@
 
   function useAbility(id) {
     var a = ABILITIES[id];
+
+    if (a.kind === 'instant') {
+      if (!abilityReady(id)) return;
+      var paidNow = payFor(id);
+      updateAbilities();
+      if (id === 'sweep') doSweep(); else if (id === 'secondWind') doSecondWind();
+      updateAbilities();
+      if (paidNow) toast(a.name + '  (\u2212' + paidNow + ')');
+      return;
+    }
 
     if (a.kind === 'timed') {
       // Already running? Do nothing rather than spend again on a
@@ -3462,7 +3964,22 @@
     lightning: 'Every tap also deals 1 to each circle touching the one you ' +
                'tapped, arcing out through the pile.',
     freeze: 'Everything stops. Nothing falls, nothing new arrives, and the ' +
-            'pile cannot top out. You can still tap.'
+            'pile cannot top out. You can still tap.',
+    split: 'Aim it at a circle and it breaks into ' + SPLIT_INTO + ' smaller ones ' +
+           'sharing its number. Easier to clear, but they take up more room ' +
+           'than the one did.',
+    overload: 'Every circle that pops sets off whatever is touching it, so ' +
+              'clears chain-react through the pile on their own.',
+    sweep: 'Clears out the bottom of the pile in one go and drops everything ' +
+           'above it down.',
+    wildcard: 'Every pop counts as a chain link, whatever number it started ' +
+              'on, so the multiplier keeps climbing.',
+    slowmo: 'Half gravity and half the spawn rate. Breathing room you can ' +
+            'keep playing through.',
+    fire: 'Hold and drag to lay a trail of fire. It keeps burning where you ' +
+          'left it and damages anything sitting in it.',
+    secondWind: 'Refills every other ability you are carrying back to full. ' +
+                'One use per run, and nothing gives it back.'
   };
 
   // 180s is a worse thing to read than 3 min, but 45s is better than 0.75 min.
@@ -3476,7 +3993,8 @@
 
     var bits = [START_MAX[id] + (START_MAX[id] === 1 ? ' charge' : ' charges') + ' to start'];
     if (a.kind === 'timed') bits.push('lasts ' + a.secs + 's');
-    if (mode.recharges) bits.push('recharges every ' + secsLabel(COOLDOWN[id]));
+    if (a.noRefill) bits.push('never recharges');
+    else if (mode.recharges) bits.push('recharges every ' + secsLabel(COOLDOWN[id]));
     return bits.join('  \u00b7  ');
   }
 
@@ -3542,6 +4060,83 @@
 
   function openHelp() { renderHelp(); helpEl.classList.remove('hidden'); }
   function closeHelp() { helpEl.classList.add('hidden'); }
+
+  // --------------------------------------------------------- loadout ----
+  function nfmt(n) { return n.toLocaleString ? n.toLocaleString('en-US') : String(n); }
+
+  function renderLoadout() {
+    var ids = Object.keys(ABILITIES).sort(function (a, b) {
+      return (UNLOCK_AT[a] || 0) - (UNLOCK_AT[b] || 0);
+    });
+
+    var nxt = nextUnlock();
+    var top = '<div class="lifeline"><span>Lifetime score</span><b>' + nfmt(lifetime) + '</b></div>';
+    if (nxt) {
+      var prev = 0;
+      for (var q = 0; q < ids.length; q++) {
+        var need = UNLOCK_AT[ids[q]] || 0;
+        if (need <= lifetime && need > prev) prev = need;
+      }
+      var span = Math.max(1, nxt.need - prev);
+      var pct = clamp((lifetime - prev) / span, 0, 1) * 100;
+      top += '<div class="lifebar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
+             '<div class="lifeline" style="margin-top:7px"><span>Next: ' +
+             ABILITIES[nxt.id].name + '</span><span>' + nfmt(nxt.need - lifetime) + ' to go</span></div>';
+    } else {
+      top += '<div class="slotcount">Everything unlocked</div>';
+    }
+    top += '<div class="slotcount' + (loadout.length >= SLOTS ? ' full' : '') + '">' +
+           loadout.length + ' of ' + SLOTS + ' slots filled' +
+           (loadout.length >= SLOTS ? ' \u2014 tap one to swap it out' : '') + '</div>';
+    loadoutTop.innerHTML = top;
+
+    var html = '';
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i], a = ABILITIES[id];
+      var open = unlocked(id);
+      var slot = loadout.indexOf(id);
+      var meta = open
+        ? (START_MAX[id] + (START_MAX[id] === 1 ? ' charge' : ' charges') +
+           (a.noRefill ? ' \u00b7 never refills' : ''))
+        : 'Unlock at ' + nfmt(UNLOCK_AT[id]);
+
+      html += '<button class="acard' + (slot >= 0 ? ' on' : '') + '" data-ab="' + id + '"' +
+        (open ? '' : ' disabled') + '>' +
+        (slot >= 0 ? '<span class="slotno">' + (slot + 1) + '</span>' : '') +
+        '<span class="aico">' + ICON[a.icon] + '</span>' +
+        '<span class="an">' + a.name + '</span>' +
+        '<span class="am">' + meta + '</span>' +
+      '</button>';
+    }
+    loadoutGrid.innerHTML = html;
+  }
+
+  function openLoadout() { renderLoadout(); loadoutSheet.classList.remove('hidden'); }
+  function closeLoadout() { loadoutSheet.classList.add('hidden'); }
+
+  loadoutGrid.addEventListener('click', function (e) {
+    var card = e.target.closest('.acard');
+    if (!card || card.disabled) return;
+    var id = card.getAttribute('data-ab');
+    var at = loadout.indexOf(id);
+    var next = loadout.slice();
+
+    if (at >= 0) {
+      if (next.length <= 1) { toast('Keep at least one ability'); return; }
+      next.splice(at, 1);
+    } else if (next.length >= SLOTS) {
+      toast('All ' + SLOTS + ' slots are full \u2014 tap one to remove it');
+      return;
+    } else {
+      next.push(id);
+    }
+
+    setLoadout(next);
+    renderLoadout();
+  });
+
+  loadoutBtn.addEventListener('click', openLoadout);
+  loadoutClose.addEventListener('click', closeLoadout);
 
   helpBtn.addEventListener('click', openHelp);
   helpClose.addEventListener('click', closeHelp);
@@ -3613,7 +4208,8 @@
            !setEl.classList.contains('hidden') ||
            !modesEl.classList.contains('hidden') ||
            !levelsEl.classList.contains('hidden') ||
-           !helpEl.classList.contains('hidden');
+           !helpEl.classList.contains('hidden') ||
+           !loadoutSheet.classList.contains('hidden');
   }
 
   // ------------------------------------------------------- rewarded ads
@@ -3769,12 +4365,17 @@
     arcs.length = 0;
     score = 0; popped = 0; elapsed = 0;
     chainVal = 0; chainLen = 0;
-    charges.bomb = BOMB_CHARGES; armed = null;
-    charges.doubleTap = DTAP_CHARGES; timeLeft.doubleTap = 0;
-    charges.lightning = LIGHT_CHARGES; timeLeft.lightning = 0;
-    charges.freeze = FREEZE_CHARGES; timeLeft.freeze = 0;
+    armed = null;
     lastBossLevel = 0;
+    gravityScale = 1;
+    inOverload = false;
+    fires.length = 0;
+    painting = false; lastPaint = null;
     for (var ck in cool) cool[ck] = 0;
+    for (var tk in timeLeft) timeLeft[tk] = 0;
+    for (var li = 0; li < loadout.length; li++) {
+      if (START_MAX[loadout[li]] !== undefined) charges[loadout[li]] = START_MAX[loadout[li]];
+    }
     arcs.length = 0;
     spawnTimer = 0; dangerTimer = 0; dangerGlow = 0;
     shake = 0; flashOver = 0;
@@ -3804,6 +4405,7 @@
 
   function endRun(reason) {
     if (over) return;
+    addLifetime(score);
     over = true;
     running = false;
     armed = null;
@@ -3959,6 +4561,7 @@
       if (!buyPanel.classList.contains('hidden')) closeCheckout();
       else if (!setEl.classList.contains('hidden')) closeSettings();
       else if (!helpEl.classList.contains('hidden')) closeHelp();
+      else if (!loadoutSheet.classList.contains('hidden')) closeLoadout();
       else if (!modesEl.classList.contains('hidden')) closeModes();
       else if (!levelsEl.classList.contains('hidden')) closeLevels();
       else if (mode.id === 'puzzle') openLevels();
@@ -4002,6 +4605,12 @@
       setClock: function (v) { clock = v; },
       openModes: openModes,
       openHelp: openHelp,
+      openLoadout: openLoadout,
+      lifetime: function () { return lifetime; },
+      setLifetime: function (v) { lifetime = v; try { localStorage.setItem(LIFE_KEY, String(v)); } catch (e) {} },
+      unlockedIds: function () {
+        return Object.keys(ABILITIES).filter(unlocked);
+      },
       openLevels: openLevels,
       levels: LEVELS,
       levelHp: levelHp,
@@ -4033,17 +4642,21 @@
         return { bomb: charges.bomb, doubleTap: charges.doubleTap, lightning: charges.lightning, freeze: charges.freeze };
       },
       setCharges: function (o) {
-        if ('bomb' in o) charges.bomb = o.bomb;
-        if ('doubleTap' in o) charges.doubleTap = o.doubleTap;
-        if ('lightning' in o) charges.lightning = o.lightning;
-        if ('freeze' in o) charges.freeze = o.freeze;
+        for (var k in o) if (k in charges) charges[k] = o[k];
         updateAbilities();
       },
+      allCharges: function () { return JSON.parse(JSON.stringify(charges)); },
+      loadout: function () { return loadout.slice(); },
+      setLoadout: setLoadout,
+      abilityIds: function () { return Object.keys(ABILITIES); },
+      unlockAt: UNLOCK_AT,
       maxCharges: MAX_CHARGES,
       cooldowns: function () { return JSON.parse(JSON.stringify(cool)); },
       cooldownSpec: COOLDOWN,
       startMax: START_MAX,
       setCooldown: function (id, v) { cool[id] = v; },
+      fires: function () { return fires.length; },
+      paintFire: paintFire,
       setLive: function (id, v) {
         if (id === 'doubleTap') timeLeft.doubleTap = v;
         else if (id === 'lightning') timeLeft.lightning = v;
@@ -4094,6 +4707,7 @@
   best = loadBest(mode.id);
   elBest.textContent = best;
 
+  loadLoadout();
   applyTheme(savedTheme);
   syncSettings();
   initAbilities();
