@@ -1717,7 +1717,16 @@
   // Voices are scheduled ahead of the clock (the standard WebAudio lookahead
   // pattern) because setInterval alone is far too jittery for a downbeat.
   //
-  var BPM = 116;
+  // The soundtrack reads the pile. Steps are scheduled one at a time from
+  // stepDur(), so moving BPM simply changes the spacing of everything queued
+  // after it -- the tempo glides rather than jumping between bars.
+  var BPM_BASE = 116;         // pile is low: the room tone
+  var BPM_WARN = 134;         // pile reaches the top quarter
+  var BPM_PANIC = 152;        // pile reaches the top tenth
+  var WARN_FRAC = 0.25, PANIC_FRAC = 0.10;
+
+  var BPM = BPM_BASE;
+  var bpmTarget = BPM_BASE;
   var LOOKAHEAD = 0.25;     // seconds of music queued in advance
   var TICK = 40;            // ms between scheduler passes
 
@@ -3041,6 +3050,14 @@
     var target = topmost === Infinity ? 0 : clamp(1 - topmost / DANGER_ZONE, 0, 1);
     dangerGlow += (target - dangerGlow) * 0.15;
 
+    // How far up the screen the settled pile reaches, as a fraction of the
+    // playfield. 1 means an empty board, 0 means it is at the ceiling.
+    var headroom = topmost === Infinity ? 1 : clamp(topmost / H, 0, 1);
+    bpmTarget = headroom <= PANIC_FRAC ? BPM_PANIC
+              : headroom <= WARN_FRAC ? BPM_WARN
+              : BPM_BASE;
+    BPM += (bpmTarget - BPM) * Math.min(1, dt * 1.6);
+
     // A frozen board cannot get any worse, so the top-out fuse is held too.
     // That is the point of the ability: freezing while buried buys you the
     // 15 seconds to dig out instead of watching the run end anyway.
@@ -3231,7 +3248,11 @@
     try { localStorage.setItem(LIFE_KEY, String(lifetime)); } catch (e) {}
   }
 
-  function unlocked(id) { return lifetime >= (UNLOCK_AT[id] || 0); }
+  // Buying the ability pack short-circuits the score ladder entirely. The
+  // entitlement lives in the same owned map as the themes, under a reserved
+  // key, so it inherits that storage, restore and (forgeable) trade-off.
+  function ownsAbilities() { return !!owned[ABILITIES_SKU]; }
+  function unlocked(id) { return ownsAbilities() || lifetime >= (UNLOCK_AT[id] || 0); }
 
   function nextUnlock() {
     var best = null;
@@ -3547,10 +3568,69 @@
       gold: '#a8730a', danger: '#c2331f',
       circles: ['#3f8f4f', '#1f8f8f', '#2f6fbf', '#4f4fa8', '#7a4f9f',
                 '#a8407f', '#bf3f5f', '#c2331f', '#bf7a1f', '#9c8420']
+    },
+
+    // ---- Flat: ground gradient collapsed to one colour, glow killed off,
+    // circle palette unshaded and poster-bright. The flatness is structural,
+    // not just a choice of hues.
+    {
+      id: 'poster', name: 'Poster', price: 199, dark: false, flat: true,
+      blurb: 'Flat poster ink on card. No gradients anywhere.',
+      bg: '#f2efe6', glow: '#f2efe6', appTop: '#f7f5ee', appBot: '#f7f5ee',
+      panel: '#ffffff', ink: '#1b1a17', muted: '#7c776c', faint: '#aaa498',
+      accent: '#e0392b', accentHi: '#c22a1e', accentInk: '#ffffff',
+      gold: '#b8860b', danger: '#c22a1e',
+      circles: ['#2fbf71', '#00a9bd', '#2d7dd2', '#4f57c9', '#8a45c4',
+                '#c93a95', '#e0392b', '#ee6a1f', '#f2a51d', '#c9b021']
+    },
+    {
+      id: 'vector', name: 'Vector', price: 199, dark: true, flat: true,
+      blurb: 'Flat slate and pure pigment. Nothing shaded, nothing lit.',
+      bg: '#22232a', glow: '#22232a', appTop: '#2a2b33', appBot: '#2a2b33',
+      panel: '#31323b', ink: '#f4f4f7', muted: '#9a9bA6', faint: '#6d6e79',
+      accent: '#ff5d5d', accentHi: '#ff7b7b', accentInk: '#241012',
+      gold: '#ffd23f', danger: '#ff5d5d',
+      circles: ['#3ddc84', '#17c3d6', '#3f8efc', '#6c63ff', '#a259ff',
+                '#e05fd6', '#ff5d8f', '#ff5d5d', '#ff8f3f', '#ffd23f']
+    },
+
+    // ---- Monochromatic: one hue, ten steps of lightness. The ramp has to
+    // stay clear of the ground at the dark end or high numbers vanish.
+    {
+      id: 'cobalt', name: 'Cobalt', price: 249, dark: true, mono: true,
+      blurb: 'One blue, ten depths of it.',
+      bg: '#061225', glow: '#0f2a52', appTop: '#0a1c38', appBot: '#050f1f',
+      panel: '#0e2140', ink: '#e6f2ff', muted: '#7f9dc4', faint: '#4f6f96',
+      accent: '#4a9bf2', accentHi: '#6db2ff', accentInk: '#051224',
+      gold: '#9fd0ff', danger: '#ff6b6b',
+      circles: ['#eaf5ff', '#cbe6ff', '#a8d4ff', '#86c2ff', '#66b0ff',
+                '#4a9bf2', '#3585de', '#2870c4', '#2160aa', '#1c5290']
+    },
+    {
+      id: 'ember', name: 'Ember', price: 249, dark: true, mono: true,
+      blurb: 'One warm hue, from ash to coal.',
+      bg: '#190d07', glow: '#4a1d0c', appTop: '#26130b', appBot: '#140903',
+      panel: '#2b160c', ink: '#fff1e2', muted: '#c0937a', faint: '#8a6450',
+      accent: '#f9853a', accentHi: '#ffa163', accentInk: '#241005',
+      gold: '#ffc978', danger: '#ff5545',
+      circles: ['#fff2e0', '#ffe0bd', '#ffcb96', '#ffb46e', '#ff9c4d',
+                '#f9853a', '#e86f2e', '#d25a26', '#bd4a20', '#a53e1b']
+    },
+    {
+      id: 'moss', name: 'Moss', price: 249, dark: true, mono: true,
+      blurb: 'One green, ten shades deep.',
+      bg: '#07160d', glow: '#0f3a1f', appTop: '#0b2214', appBot: '#051209',
+      panel: '#0e2916', ink: '#e9f8ea', muted: '#84ab8b', faint: '#557a5c',
+      accent: '#4dab45', accentHi: '#66c75d', accentInk: '#05170a',
+      gold: '#cfe89a', danger: '#e2604a',
+      circles: ['#eaf7e6', '#cdeec4', '#a9e09c', '#86d179', '#66c05a',
+                '#4dab45', '#3d9339', '#337f30', '#2a6b28', '#235a22']
     }
   ];
 
-  var BUNDLE_PRICE = 599;   // unlock-everything price, in cents
+  var BUNDLE_PRICE = 599;   // every theme, in cents
+  var ABILITIES_PRICE = 499; // every ability at once, skipping the score grind
+  var ABILITIES_SKU = '_abilities';   // reserved key in the same owned map
 
   function themeById(id) {
     for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i];
@@ -3763,26 +3843,32 @@
     buyStage = 0;
 
     var isBundle = target === 'bundle';
-    var t = isBundle ? THEMES[0] : target;
-    var price = isBundle ? BUNDLE_PRICE : target.price;
+    var isAbil = target === 'abilities';
+    var t = (isBundle || isAbil) ? THEMES[0] : target;
+    var price = isBundle ? BUNDLE_PRICE : (isAbil ? ABILITIES_PRICE : target.price);
 
-    var prev = isBundle ? bundlePreviewHtml() : previewHtml(t);
+    var prev = (isBundle || isAbil) ? bundlePreviewHtml() : previewHtml(t);
     buyPreview.outerHTML = prev.replace('class="tprev"', 'class="tprev" id="buyPreview"');
     buyPreview = document.getElementById('buyPreview');
 
-    buyName.textContent = isBundle ? 'Every theme' : t.name;
+    buyName.textContent = isBundle ? 'Every theme'
+                        : isAbil ? 'Every ability' : t.name;
     buyPrice.textContent = money(price);
 
     licenseWrap.classList.add('hidden');
     licenseKey.value = '';
 
     if (STORE.provider === 'gumroad') {
-      buyNote.textContent = isBundle
-        ? 'Unlocks all themes. You will get a licence key by email — paste it back here to unlock.'
-        : t.blurb + ' You will get a licence key by email — paste it back here to unlock.';
+      buyNote.textContent = (isBundle ? 'Unlocks all themes.'
+                            : isAbil ? 'Unlocks every ability immediately.'
+                            : t.blurb) +
+        ' You will get a licence key by email — paste it back here to unlock.';
       buyConfirm.textContent = 'Open store page';
     } else {
-      buyNote.innerHTML = (isBundle ? 'Unlocks every theme, now and later.' : t.blurb) +
+      buyNote.innerHTML = (isBundle ? 'Unlocks every theme, now and later.'
+                          : isAbil ? 'Unlocks all ' + Object.keys(ABILITIES).length +
+                            ' abilities at once, so you can skip the score unlocks.'
+                          : t.blurb) +
         '<br><b>Demo checkout — no payment provider is connected, so nothing is charged.</b>';
       buyConfirm.textContent = 'Complete purchase';
     }
@@ -3798,7 +3884,12 @@
 
   function completePurchase(via, key) {
     var label;
-    if (pendingBuy === 'bundle') {
+    if (pendingBuy === 'abilities') {
+      grant(ABILITIES_SKU, via, key);
+      label = 'All abilities unlocked';
+      closeCheckout();
+      renderLoadout();
+    } else if (pendingBuy === 'bundle') {
       var locked = lockedThemes();
       for (var i = 0; i < locked.length; i++) grant(locked[i].id, via, key);
       label = 'All themes unlocked';
@@ -4085,6 +4176,11 @@
     } else {
       top += '<div class="slotcount">Everything unlocked</div>';
     }
+    if (nxt && !ownsAbilities()) {
+      top += '<button class="btn btn-reward btn-sm" id="buyAbilBtn" ' +
+             'style="margin-top:12px;width:100%">Unlock all abilities \u00b7 ' +
+             money(ABILITIES_PRICE) + '</button>';
+    }
     top += '<div class="slotcount' + (loadout.length >= SLOTS ? ' full' : '') + '">' +
            loadout.length + ' of ' + SLOTS + ' slots filled' +
            (loadout.length >= SLOTS ? ' \u2014 tap one to swap it out' : '') + '</div>';
@@ -4110,6 +4206,10 @@
     }
     loadoutGrid.innerHTML = html;
   }
+
+  loadoutTop.addEventListener('click', function (e) {
+    if (e.target.closest('#buyAbilBtn')) openCheckout('abilities');
+  });
 
   function openLoadout() { renderLoadout(); loadoutSheet.classList.remove('hidden'); }
   function closeLoadout() { loadoutSheet.classList.add('hidden'); }
@@ -4209,7 +4309,8 @@
            !modesEl.classList.contains('hidden') ||
            !levelsEl.classList.contains('hidden') ||
            !helpEl.classList.contains('hidden') ||
-           !loadoutSheet.classList.contains('hidden');
+           !loadoutSheet.classList.contains('hidden') ||
+           !buyPanel.classList.contains('hidden');
   }
 
   // ------------------------------------------------------- rewarded ads
@@ -4368,6 +4469,7 @@
     armed = null;
     lastBossLevel = 0;
     gravityScale = 1;
+    BPM = BPM_BASE; bpmTarget = BPM_BASE;
     inOverload = false;
     fires.length = 0;
     painting = false; lastPaint = null;
@@ -4405,6 +4507,7 @@
 
   function endRun(reason) {
     if (over) return;
+    BPM = BPM_BASE; bpmTarget = BPM_BASE;
     addLifetime(score);
     over = true;
     running = false;
@@ -4623,7 +4726,10 @@
       nodes: function () {
         return { ctx: audioCtx, master: masterGain, music: musicBus, sfx: sfxBus };
       },
-      music: function () { return { playing: musicPlaying, step: musicStep, bpm: BPM }; },
+      music: function () {
+        return { playing: musicPlaying, step: musicStep,
+                 bpm: +BPM.toFixed(1), bpmTarget: bpmTarget };
+      },
       openSettings: openSettings,
       use: useAbility,
       arm: useAbility,
