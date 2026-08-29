@@ -1910,18 +1910,50 @@
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
   }
 
+  // Negative darkens toward black, positive washes out toward white.
+  // `spin` rotates the RGB channels, which moves the actual hue.
+  function toneHex(hex, amt, spin) {
+    var n = parseInt(hex.slice(1), 16);
+    var c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    for (var k = 0; k < spin; k++) c = [c[2], c[0], c[1]];
+    for (var j = 0; j < 3; j++) {
+      c[j] = Math.round(amt <= 0 ? c[j] * (1 + amt) : c[j] + (255 - c[j]) * amt);
+    }
+    return '#' + ((1 << 24) + (c[0] << 16) + (c[1] << 8) + c[2]).toString(16).slice(1);
+  }
+
+  // How each band past the palette is derived from it.
+  //
+  // Lightness alone cannot separate thirty values out of ten colours: past
+  // about one band a heavy tone compresses adjacent hues into each other,
+  // and re-indexing does not help because the tight pairs are WITHIN a
+  // band. Measured across all eleven palettes, tone-only degrades from a
+  // worst pair of 8 at twenty values to 3 at forty. Rotating the channels
+  // moves the hue itself, which works on any palette -- including the
+  // monochromatic ones, where nothing else does -- and holds that worst
+  // pair at 8 the whole way.
+  //
+  // Band 1 is deliberately left un-rotated: 11-20 is the body of ordinary
+  // play, and a monochromatic theme has to stay monochromatic through it.
+  // The hue only starts moving at 21, which is seven minutes into a run.
+  var HP_BANDS = [
+    { spin: 0, tone: -0.46 },   // 11-20  the theme's own colours, deeper
+    { spin: 1, tone: -0.15 },   // 21-30
+    { spin: 2, tone: -0.15 },   // 31-40
+    { spin: 1, tone: 0.42 },    // 41-50
+    { spin: 2, tone: 0.42 }     // 51-60, then the set repeats
+  ];
+
   function hpColor(hp) {
     var i = Math.max(0, hp - 1);
     if (i < PALETTE.length) return PALETTE[i];
-    // Past the palette, run through it AGAIN at a uniformly deeper tone
-    // rather than fading one colour further and further into mud. Deepening
-    // a single hue gives ten shades of the same olive that nobody can tell
-    // apart; a second pass gives ten genuinely distinct hues that still all
-    // read as "darker than the first ten". Chains key on the number a
-    // circle STARTED on, so a 13 and a 17 side by side have to look
-    // different from each other.
-    var band = Math.floor(i / PALETTE.length);         // 1 for 11-20, 2 beyond
-    return darkenHex(PALETTE[i % PALETTE.length], Math.min(0.8, 0.46 * band));
+    // Past the palette, run through it again in a different tone -- and,
+    // higher up, a different hue. Chains key on the number a circle STARTED
+    // on, so a 13 and a 17 side by side have to look different. See
+    // HP_BANDS for how each pass is derived and why.
+    var band = Math.floor(i / PALETTE.length);
+    var t = HP_BANDS[(band - 1) % HP_BANDS.length];
+    return toneHex(PALETTE[i % PALETTE.length], t.tone, t.spin);
   }
 
   // ---------------------------------------------------------------- state
@@ -2542,12 +2574,41 @@
   // mode.hpRamp: Endless is a long sit-down so it climbs gently, while Rush
   // is over in a couple of minutes and needs its numbers to arrive.
   var HP_RAMP = 45;   // fallback only
+
+  // The shape of a single roll, named so the ceiling below can be derived
+  // from it instead of a second copy of the same numbers drifting out of
+  // step with it.
+  var HP_BASE = 0.8;          // a circle of the smallest size
+  var HP_SPAN = 2.0;          // added at the largest size
+  var HP_JITTER_LO = 0.7;
+  var HP_JITTER_HI = 1.25;
+  var HP_ROLL_MAX = (HP_BASE + HP_SPAN) * HP_JITTER_HI;   // best possible roll at d = 1
   // The ceiling. Raised from 12 after play-testing: people use four fingers,
   // not one, and a wall of twelves stopped being a wall. Note that this
   // changes only where the ramp STOPS -- difficulty() is untouched, so the
   // first 12 still arrives at exactly the same moment it always did, and
   // everything past that is new headroom rather than a faster climb.
   var MAX_HP = 20;
+  // ... and past it the ceiling creeps: one more every CAP_CREEP seconds,
+  // starting only once the roll can actually produce MAX_HP. Before that
+  // point the clamp is doing nothing anyway, so starting the creep any
+  // earlier would raise a ceiling nothing was reaching.
+  var CAP_CREEP = 45;         // seconds per +1 once MAX_HP is in play
+
+  // Elapsed time at which a roll can first hit MAX_HP, for the mode in play.
+  // Derived from the roll itself, so retuning either keeps them in step.
+  function capCreepStart() {
+    var dNeeded = (MAX_HP - 0.49) / HP_ROLL_MAX;    // -0.49: Math.round()
+    return Math.max(0, (dNeeded - 1) * (mode.hpRamp || HP_RAMP));
+  }
+
+  function hpCeiling() {
+    // A mode with its own cap means it, and keeps it flat -- Kid Mode's 3
+    // is the point of Kid Mode, not a starting value.
+    if (mode.maxHp) return mode.maxHp;
+    var past = elapsed - capCreepStart();
+    return past <= 0 ? MAX_HP : MAX_HP + Math.floor(past / CAP_CREEP);
+  }
 
   // Bosses arrive every fifth level: 15 at level 5, then +5 each time, so
   // bossHp(level) is simply 10 + level. They are big, and abilities do not
@@ -2595,8 +2656,8 @@
     var d = difficulty();
 
     // Bigger circles take more taps, and everything toughens up over time.
-    var hp = Math.round((0.8 + sizeFactor * 2.0) * d * rand(0.7, 1.25));
-    hp = clamp(hp, 1, mode.maxHp || MAX_HP);
+    var hp = Math.round((HP_BASE + sizeFactor * HP_SPAN) * d * rand(HP_JITTER_LO, HP_JITTER_HI));
+    hp = clamp(hp, 1, hpCeiling());
 
     // Try a few lanes and drop into the emptiest one.
     var bestX = null, bestCost = Infinity;
@@ -3634,7 +3695,7 @@
     var rad = Math.max(9, c.r * SEED_SCALE);
     // Half the parent's number, rounded up, so a seeder is a real cost
     // without being a wall.
-    var hp = clamp(Math.ceil(c.maxHp / 2), 1, mode.maxHp || MAX_HP);
+    var hp = clamp(Math.ceil(c.maxHp / 2), 1, hpCeiling());
 
     for (var i = 0; i < SEED_INTO; i++) {
       var ang = (i / SEED_INTO) * Math.PI * 2 + c.wobble;
@@ -4164,7 +4225,7 @@
       }
 
       // Taps remaining.
-      var fs = r * (c.hp >= 10 ? 0.72 : 0.95);
+      var fs = r * (c.hp >= 100 ? 0.54 : c.hp >= 10 ? 0.72 : 0.95);
       ctx.font = '800 ' + fs.toFixed(1) + 'px Montserrat, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -7052,6 +7113,9 @@
       },
       touching: touching,
       hpColor: hpColor,
+      hpCeiling: function () { return hpCeiling(); },
+      capCreepStart: function () { return capCreepStart(); },
+      capCreep: function () { return CAP_CREEP; },
       traits: TRAITS,
       traitChance: function () { return TRAIT_CHANCE; },
       traitsOn: function () {
