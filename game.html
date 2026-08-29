@@ -1605,6 +1605,7 @@
       hudLabel: 'Level',
       hudValue: function () { return level(); },
       spawnGap: function () { return Math.max(0.45, 1.45 - elapsed * 0.013); },
+      hpRamp: 80,
       paysWithTime: false,
       setup: function () {},
       tick: function () {},
@@ -1621,6 +1622,7 @@
       // Pressure comes from a shorter fuse and a faster ramp, not from
       // clipping the reward.
       spawnGap: function () { return Math.max(0.32, 1.10 - elapsed * 0.020); },
+      hpRamp: 45,
       setup: function () { clock = RUSH_START; },
       tick: function (dt) {
         // Time gets more expensive the longer you last. Without this a
@@ -1651,6 +1653,7 @@
       hudLabel: 'Taps',
       hudValue: function () { return taps; },
       spawnGap: function () { return 1; },
+      hpRamp: 80,          // unused: Puzzle does not spawn
       paysWithTime: false,
       setup: function () {
         var lv = LEVELS[levelIdx];
@@ -1795,8 +1798,10 @@
   // ------------------------------------------------------------ spawning
   // Seconds of play per +1 to the difficulty multiplier. Bigger = the
   // numbers climb more slowly, which is the main knob on how long a run
-  // stays playable before it outruns you.
-  var HP_RAMP = 45;
+  // stays playable before it outruns you. Each mode sets its own via
+  // mode.hpRamp: Endless is a long sit-down so it climbs gently, while Rush
+  // is over in a couple of minutes and needs its numbers to arrive.
+  var HP_RAMP = 45;   // fallback only
   var MAX_HP = 12;    // the ceiling: past this it stops being keepable-up-with
 
   // Bosses arrive every fifth level: 15 at level 5, then +5 each time, so
@@ -1806,7 +1811,7 @@
   var BOSS_SIZE = 1.7;        // multiple of the largest normal radius
   function bossHp(lv) { return 10 + lv; }
 
-  function difficulty() { return 1 + elapsed / HP_RAMP; }
+  function difficulty() { return 1 + elapsed / (mode.hpRamp || HP_RAMP); }
   function level() { return 1 + Math.floor(elapsed / 20); }
 
   function radiusRange() {
