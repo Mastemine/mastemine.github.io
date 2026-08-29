@@ -1909,14 +1909,15 @@
   function hpColor(hp) {
     var i = Math.max(0, hp - 1);
     if (i < PALETTE.length) return PALETTE[i];
-    // Past the palette the last colour is deepened progressively, spread
-    // across however far MAX_HP now reaches rather than in fixed steps that
-    // saturate. Chains key on the number a circle STARTED on, so a 13 and a
-    // 17 sitting side by side must not read as the same colour.
-    var over = i - PALETTE.length + 1;
-    var span = Math.max(1, MAX_HP - PALETTE.length);
-    return darkenHex(PALETTE[PALETTE.length - 1],
-                     Math.min(0.62, 0.10 + 0.52 * (over / span)));
+    // Past the palette, run through it AGAIN at a uniformly deeper tone
+    // rather than fading one colour further and further into mud. Deepening
+    // a single hue gives ten shades of the same olive that nobody can tell
+    // apart; a second pass gives ten genuinely distinct hues that still all
+    // read as "darker than the first ten". Chains key on the number a
+    // circle STARTED on, so a 13 and a 17 side by side have to look
+    // different from each other.
+    var band = Math.floor(i / PALETTE.length);         // 1 for 11-20, 2 beyond
+    return darkenHex(PALETTE[i % PALETTE.length], Math.min(0.8, 0.46 * band));
   }
 
   // ---------------------------------------------------------------- state
