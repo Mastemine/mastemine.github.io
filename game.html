@@ -853,6 +853,27 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* The pop-effect picker: three cards, each with a live sample of itself
+     rather than a swatch -- these are motion, and a still cannot show it. */
+  .fxpick {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    padding: 10px 12px 12px;
+  }
+  .fxcard {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: rgba(255,255,255,0.03); color: var(--ink);
+    padding: 8px 6px 9px; cursor: pointer; text-align: center;
+    font: inherit; display: grid; gap: 6px; justify-items: center;
+  }
+  .fxcard:hover { border-color: var(--accent); }
+  .fxcard.on { border-color: var(--accent); background: rgba(255,255,255,0.07); }
+  .fxcard canvas { width: 100%; height: 58px; border-radius: 8px; display: block; }
+  .fxcard b { font-size: 11px; font-weight: 800; letter-spacing: .02em; }
+  .fxnote {
+    grid-column: 1 / -1;          /* the blurb spans the row, not a fourth cell */
+    font-size: 11px; color: var(--muted); line-height: 1.45;
+    margin: 0;
+  }
   .setnote {
     font-size: 10px;
     line-height: 1.7;
@@ -1392,6 +1413,15 @@
         </div>
       </div>
 
+      <div class="setgroup">
+        <div class="setrow">
+          <span class="rlabel">Pop effect
+            <span class="rsub">What a circle throws off when it bursts</span>
+          </span>
+        </div>
+        <div class="fxpick" id="fxPick"></div>
+      </div>
+
       <p class="setnote">The speaker in the top bar mutes everything at once
         without losing these settings.</p>
     </div>
@@ -1497,6 +1527,7 @@
   var loadoutGrid = document.getElementById('loadoutGrid');
   var setEl    = document.getElementById('settings');
   var setClose = document.getElementById('setClose');
+  var fxPick   = document.getElementById('fxPick');
   var musicSw  = document.getElementById('musicSw');
   var musicVol = document.getElementById('musicVol');
   var musicVolVal=document.getElementById('musicVolVal');
@@ -2459,21 +2490,164 @@
     }
   }
 
-  // ---------------------------------------------------------------- juice
-  function burst(x, y, r, color, count) {
-    var n = count || Math.round(8 + r * 0.5);
-    for (var i = 0; i < n; i++) {
-      var a = Math.random() * Math.PI * 2;
-      var sp = rand(1.2, 5.5);
-      particles.push({
-        x: x, y: y,
-        vx: Math.cos(a) * sp,
-        vy: Math.sin(a) * sp - 1,
-        r: rand(1.5, r * 0.16),
-        life: 1, decay: rand(0.016, 0.034),
-        color: color
-      });
+  // ------------------------------------------------------------- pop feel
+  //
+  // What a pop throws off is pure decoration, so it is a free choice rather
+  // than something to sell -- the themes are the paid cosmetic. Each style
+  // owns its own spawn, step and draw, so a new one is three functions and a
+  // row in this table, and none of them can disturb the others.
+  //
+  var POPFX = {
+    sparks: {
+      id: 'sparks', name: 'Sparks', blurb: 'The house look. A quick scatter of embers.',
+      spawn: function (x, y, r, color, n) {
+        for (var i = 0; i < n; i++) {
+          var a = Math.random() * Math.PI * 2;
+          var sp = rand(1.2, 5.5);
+          particles.push({
+            kind: 'spark', x: x, y: y,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1,
+            r: rand(1.5, r * 0.16),
+            life: 1, decay: rand(0.016, 0.034), color: color
+          });
+        }
+      },
+      step: function (p) {
+        p.vy += 0.16;
+        p.vx *= 0.99;
+        p.x += p.vx; p.y += p.vy;
+        p.life -= p.decay;
+      },
+      draw: function (p) {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+      }
+    },
+
+    confetti: {
+      id: 'confetti', name: 'Confetti', blurb: 'Paper squares that tumble and drift down.',
+      spawn: function (x, y, r, color, n) {
+        // Party colours, not the circle's own: a single hue reads as debris,
+        // a spread reads as celebration. The circle's colour stays in the mix
+        // so a pop is still legible as having come from that circle.
+        var mix = [color, activeTheme.gold, activeTheme.accent,
+                   PALETTE[(Math.random() * PALETTE.length) | 0] || color];
+        for (var i = 0; i < n; i++) {
+          var a = Math.random() * Math.PI * 2;
+          var sp = rand(1.0, 4.2);
+          particles.push({
+            kind: 'confetti', x: x, y: y,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2.2,
+            w: rand(3, 4 + r * 0.10), h: rand(4, 6 + r * 0.12),
+            ang: Math.random() * Math.PI * 2,
+            spin: rand(-0.22, 0.22),
+            // Each piece flutters on its own phase, or the whole handful
+            // would sway in lockstep and read as one object.
+            phase: Math.random() * 6.28, sway: rand(0.5, 1.5),
+            life: 1, decay: rand(0.008, 0.016),
+            color: mix[(Math.random() * mix.length) | 0]
+          });
+        }
+      },
+      step: function (p) {
+        p.phase += 0.16;
+        p.vy += 0.075;                       // paper falls slowly
+        p.vy = Math.min(p.vy, 3.4);          // and reaches its terminal drift
+        p.vx *= 0.97;
+        p.ang += p.spin;
+        p.x += p.vx + Math.sin(p.phase) * p.sway;
+        p.y += p.vy;
+        p.life -= p.decay;
+      },
+      draw: function (p) {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.ang);
+        // Squashing the height on the spin is what sells it as a flat sheet
+        // turning over rather than a rotating brick.
+        var squash = Math.abs(Math.cos(p.phase * 0.9));
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h * squash / 2, p.w, Math.max(1, p.h * squash));
+        ctx.restore();
+      }
+    },
+
+    bubbles: {
+      id: 'bubbles', name: 'Bubbles', blurb: 'Soap bubbles that rise, wobble and thin out.',
+      spawn: function (x, y, r, color, n) {
+        for (var i = 0; i < n; i++) {
+          var a = Math.random() * Math.PI * 2;
+          var sp = rand(0.4, 2.0);
+          particles.push({
+            kind: 'bubble', x: x, y: y,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5 - 0.6,
+            r: rand(2.5, 4 + r * 0.20),
+            grow: rand(0.008, 0.03),
+            phase: Math.random() * 6.28, sway: rand(0.2, 0.9),
+            life: 1, decay: rand(0.009, 0.019), color: color
+          });
+        }
+      },
+      step: function (p) {
+        p.phase += 0.11;
+        p.vy -= 0.028;                       // buoyant, so it climbs
+        p.vy = Math.max(p.vy, -2.2);
+        p.vx *= 0.98;
+        p.r += p.grow;                       // thinning as it swells
+        p.x += p.vx + Math.sin(p.phase) * p.sway;
+        p.y += p.vy;
+        p.life -= p.decay;
+      },
+      draw: function (p) {
+        var a = Math.max(0, p.life);
+        // A bubble is a film, not a disc: a faint fill, a bright rim and one
+        // highlight where the light would catch it.
+        ctx.globalAlpha = a * 0.22;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+
+        ctx.globalAlpha = a * 0.85;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+
+        ctx.globalAlpha = a * 0.7;
+        ctx.beginPath();
+        ctx.arc(p.x - p.r * 0.33, p.y - p.r * 0.33, Math.max(0.6, p.r * 0.20), 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      }
     }
+  };
+
+  var POPFX_KEY = 'popFx';
+  var popFx = POPFX.sparks;
+
+  function loadPopFx() {
+    try {
+      var id = localStorage.getItem(POPFX_KEY);
+      if (id && POPFX[id]) popFx = POPFX[id];
+    } catch (e) {}
+  }
+  function selectPopFx(id) {
+    if (!POPFX[id]) return;
+    popFx = POPFX[id];
+    try { localStorage.setItem(POPFX_KEY, id); } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------- juice
+  // Every pop in the game comes through here, so the chosen style applies
+  // everywhere at once -- taps, blasts, burns, the lot.
+  function burst(x, y, r, color, count) {
+    popFx.spawn(x, y, r, color, count || Math.round(8 + r * 0.5));
   }
 
   function floatText(x, y, text, color) {
@@ -2484,11 +2658,12 @@
     var i, p;
     for (i = particles.length - 1; i >= 0; i--) {
       p = particles[i];
-      p.vy += 0.16;
-      p.vx *= 0.99;
-      p.x += p.vx; p.y += p.vy;
-      p.life -= p.decay;
-      if (p.life <= 0 || p.y > H + 40) particles.splice(i, 1);
+      // Stepped by the style that made it, not by the style now selected:
+      // changing the setting mid-game must not make what is already in the
+      // air lurch into different physics.
+      (POPFX[p.kind === 'confetti' ? 'confetti'
+           : p.kind === 'bubble' ? 'bubbles' : 'sparks']).step(p);
+      if (p.life <= 0 || p.y > H + 40 || p.y < -60) particles.splice(i, 1);
     }
     for (i = floaters.length - 1; i >= 0; i--) {
       var f = floaters[i];
@@ -3684,14 +3859,11 @@
       ctx.restore();
     }
 
-    // Particles.
+    // Particles, each drawn by the style that made it.
     for (i = 0; i < particles.length; i++) {
       var p = particles[i];
-      ctx.globalAlpha = Math.max(0, p.life);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = p.color;
-      ctx.fill();
+      (POPFX[p.kind === 'confetti' ? 'confetti'
+           : p.kind === 'bubble' ? 'bubbles' : 'sparks']).draw(p);
     }
     ctx.globalAlpha = 1;
 
@@ -5314,8 +5486,141 @@
     sfxRow.classList.toggle('off', !sfxSw.checked);
   }
 
-  function openSettings() { syncSettings(); setEl.classList.remove('hidden'); }
-  function closeSettings() { setEl.classList.add('hidden'); }
+  // ---- pop-effect picker ----------------------------------------------
+  //
+  // Each card runs the real effect in miniature. A still swatch would say
+  // nothing useful about three things whose whole difference is how they
+  // move, so the cards animate while the panel is open and stop when it
+  // closes.
+  //
+  // The style functions write to the module's `particles` and draw with the
+  // module's `ctx` -- that is what makes them one implementation shared by
+  // the game and these previews. Both are swapped for the length of one
+  // synchronous call and put straight back.
+  //
+  var fxPreviews = [];
+  var fxRaf = null;
+
+  function withTarget(list, context, fn) {
+    var keepList = particles, keepCtx = ctx;
+    particles = list; ctx = context;
+    try { fn(); } finally { particles = keepList; ctx = keepCtx; }
+  }
+
+  function renderFxPick() {
+    fxPick.innerHTML = '';
+    fxPreviews = [];
+
+    var ids = Object.keys(POPFX);
+    for (var i = 0; i < ids.length; i++) {
+      var fx = POPFX[ids[i]];
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'fxcard' + (fx.id === popFx.id ? ' on' : '');
+      card.setAttribute('data-fx', fx.id);
+      card.setAttribute('aria-pressed', fx.id === popFx.id ? 'true' : 'false');
+      card.innerHTML = '<canvas></canvas><b>' + fx.name + '</b>';
+      fxPick.appendChild(card);
+
+      var cv = card.querySelector('canvas');
+      fxPreviews.push({ fx: fx, cv: cv, cx: cv.getContext('2d'), bits: [], t: Math.random() * 0.9 });
+    }
+
+    var note = document.createElement('p');
+    note.className = 'fxnote';
+    note.textContent = popFx.blurb;
+    fxPick.appendChild(note);
+  }
+
+  // The effects are tuned for a playfield hundreds of pixels tall. Run at
+  // card size they clear the frame in a third of a second and read as a
+  // flicker, so the preview is drawn into a scaled-down view of a
+  // full-height space instead of being re-tuned -- what the card shows is
+  // then literally the effect, only smaller.
+  var FX_SCALE = 0.34;
+  var FX_EVERY = 0.9;        // seconds between sample bursts
+
+  function stepFxPreviews() {
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+
+    for (var i = 0; i < fxPreviews.length; i++) {
+      var pv = fxPreviews[i], cv = pv.cv;
+
+      // Match the backing store to the box the card actually got, or the
+      // sample is drawn at the wrong scale on a phone.
+      var w = cv.clientWidth || 92, h = cv.clientHeight || 58;
+      if (cv.width !== Math.round(w * dpr)) {
+        cv.width = Math.round(w * dpr);
+        cv.height = Math.round(h * dpr);
+      }
+      pv.cx.setTransform(dpr * FX_SCALE, 0, 0, dpr * FX_SCALE, 0, 0);
+      pv.cx.clearRect(0, 0, w / FX_SCALE, h / FX_SCALE);
+
+      var vw = w / FX_SCALE, vh = h / FX_SCALE;
+
+      pv.t -= 1 / 60;
+      if (pv.t <= 0) {
+        pv.t = FX_EVERY;
+        // Bubbles rise and the other two fall, so each starts where it has
+        // the most of the card to travel across.
+        pv.at = pv.fx.id === 'bubbles' ? vh * 0.82 : vh * 0.3;
+        withTarget(pv.bits, pv.cx, spawnSample(pv, vw));
+      }
+
+      withTarget(pv.bits, pv.cx, stepSample(pv, vw, vh));
+    }
+    fxRaf = requestAnimationFrame(stepFxPreviews);
+  }
+
+  function spawnSample(pv, vw) {
+    return function () { pv.fx.spawn(vw / 2, pv.at, 30, activeTheme.circles[3], 13); };
+  }
+
+  function stepSample(pv, vw, vh) {
+    return function () {
+      for (var j = pv.bits.length - 1; j >= 0; j--) {
+        var b = pv.bits[j];
+        pv.fx.step(b);
+        // Cull anything off the card, or a card left open accumulates
+        // invisible particles for as long as the panel is up.
+        if (b.life <= 0 || b.y > vh + 30 || b.y < -30 || b.x < -30 || b.x > vw + 30) {
+          pv.bits.splice(j, 1);
+          continue;
+        }
+        pv.fx.draw(b);
+      }
+      pv.cx.globalAlpha = 1;
+    };
+  }
+
+  function startFxPreviews() {
+    if (fxRaf === null) fxRaf = requestAnimationFrame(stepFxPreviews);
+  }
+  function stopFxPreviews() {
+    if (fxRaf !== null) { cancelAnimationFrame(fxRaf); fxRaf = null; }
+  }
+
+  fxPick.addEventListener('click', function (e) {
+    var card = e.target.closest('.fxcard');
+    if (!card) return;
+    selectPopFx(card.getAttribute('data-fx'));
+    renderFxPick();
+    // A sample of the new choice on the board behind the panel, so the
+    // change is confirmed at the size it will actually be seen.
+    burst(W / 2, H * 0.35, 34, activeTheme.circles[3]);
+    beep(560, 0.08, 'sine', 0.06);
+  });
+
+  function openSettings() {
+    syncSettings();
+    renderFxPick();
+    startFxPreviews();
+    setEl.classList.remove('hidden');
+  }
+  function closeSettings() {
+    stopFxPreviews();
+    setEl.classList.add('hidden');
+  }
 
   musicSw.addEventListener('change', function () {
     AUDIO.musicOn = musicSw.checked;
@@ -5869,6 +6174,12 @@
         return hp;
       },
       touching: touching,
+      popFx: function () { return popFx.id; },
+      popFxIds: function () { return Object.keys(POPFX); },
+      selectPopFx: selectPopFx,
+      particles: function () {
+        return particles.map(function (p) { return p.kind; });
+      },
       lasso: function (pts) {
         armed = 'lasso'; lassoPath = pts.slice(); closeLasso();
       },
@@ -5903,6 +6214,7 @@
   }
 
   loadOwned();
+  loadPopFx();
 
   var savedTheme = THEMES[0];
   try {
