@@ -875,6 +875,70 @@
     .menurow .btn-ghost { padding: 11px 14px; font-size: 11px; letter-spacing: .06em; }
   }
 
+  /* ---------- Scores ---------- */
+  #scores {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #scores.hidden { display: none; }
+
+  .bigstat {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 15px 16px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .bigstat .k {
+    font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .bigstat .v {
+    font-size: 26px; font-weight: 900; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .brow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+  }
+  .brow + .brow { border-top: 1px solid var(--line); }
+  .brank {
+    flex: 0 0 20px;
+    font-size: 11px; font-weight: 800; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .brow.top .brank { color: var(--gold); }
+  .bmid { flex: 1 1 auto; min-width: 0; }
+  .bscore { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .bmeta {
+    margin-top: 3px;
+    font-size: 9px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .bbar { height: 3px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
+  .bbar i { display: block; height: 100%; background: var(--accent); }
+  .bempty { font-size: 11px; color: var(--muted); padding: 10px 0; line-height: 1.6; }
+
+  .globalnote {
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--faint);
+  }
+  .globalnote b { color: var(--muted); }
+
   /* ---------- Loadout ---------- */
   #loadoutSheet {
     position: absolute;
@@ -1140,6 +1204,7 @@
         <button class="btn btn-ghost" id="modesBtn">Modes</button>
         <button class="btn btn-ghost" id="themesBtn">Themes</button>
         <button class="btn btn-ghost" id="settingsBtn">Settings</button>
+        <button class="btn btn-ghost" id="scoresBtn">Scores</button>
         <button class="btn btn-ghost" id="loadoutBtn">Loadout</button>
         <button class="btn btn-ghost" id="helpBtn">Help</button>
       </div>
@@ -1175,6 +1240,19 @@
       </button>
     </div>
     <div class="setbody" id="modeList"></div>
+  </div>
+
+  <div id="scores" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Records</div>
+        <h2>Scores</h2>
+      </div>
+      <button class="iconbtn" id="scoresClose" aria-label="Close scores">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="setbody" id="scoresBody"></div>
   </div>
 
   <div id="loadoutSheet" class="hidden">
@@ -1349,6 +1427,10 @@
   var helpEl   = document.getElementById('help');
   var helpClose= document.getElementById('helpClose');
   var helpBody = document.getElementById('helpBody');
+  var scoresBtn = document.getElementById('scoresBtn');
+  var scoresEl = document.getElementById('scores');
+  var scoresClose = document.getElementById('scoresClose');
+  var scoresBody = document.getElementById('scoresBody');
   var loadoutBtn = document.getElementById('loadoutBtn');
   var loadoutSheet = document.getElementById('loadoutSheet');
   var loadoutClose = document.getElementById('loadoutClose');
@@ -3242,6 +3324,72 @@
   var lifetime = 0;
   try { lifetime = parseInt(localStorage.getItem(LIFE_KEY) || '0', 10) || 0; } catch (e) {}
 
+  // ---- run history -----------------------------------------------------
+  //
+  // Every finished run is kept locally so the daily and weekly boards have
+  // something to rank. Capped, because localStorage is small and nobody
+  // needs the thousandth-best run of last March.
+  //
+  var RUNS_KEY = 'popRuns';
+  var RUNS_CAP = 400;
+  var runs = [];
+  try { runs = JSON.parse(localStorage.getItem(RUNS_KEY) || '[]') || []; } catch (e) { runs = []; }
+
+  function saveRuns() {
+    try { localStorage.setItem(RUNS_KEY, JSON.stringify(runs)); } catch (e) {}
+  }
+
+  function recordRun(modeId, sc) {
+    if (!sc || sc <= 0) return;
+    runs.push({ t: Date.now(), m: modeId, s: sc });
+    if (runs.length > RUNS_CAP) runs = runs.slice(-RUNS_CAP);
+    saveRuns();
+  }
+
+  function startOfDay(d) {
+    var x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime();
+  }
+  // Weeks start Monday, which is what a server-side weekly board would use.
+  function startOfWeek(d) {
+    var x = new Date(d); x.setHours(0, 0, 0, 0);
+    var wd = (x.getDay() + 6) % 7;       // Monday = 0
+    x.setDate(x.getDate() - wd);
+    return x.getTime();
+  }
+
+  // ---- score boards ----------------------------------------------------
+  //
+  // Everything the board UI needs comes through here. The local provider
+  // can only ever return this device's own runs; a server-backed provider
+  // would return everyone's from the same shape, so the UI does not change.
+  //
+  var SCORES = {
+    provider: 'local',        // 'local' | 'remote' once a backend exists
+    endpoint: '',             // remote only
+    name: ''                  // remote only: what to submit runs under
+  };
+
+  function localBoard(sinceTs, limit) {
+    var out = [];
+    for (var i = 0; i < runs.length; i++) {
+      if (runs[i].t >= sinceTs) out.push(runs[i]);
+    }
+    out.sort(function (a, b) { return b.s - a.s; });
+    return out.slice(0, limit || 5).map(function (r, i) {
+      return { rank: i + 1, score: r.s, mode: r.m, at: r.t, you: true };
+    });
+  }
+
+  // Async by design even though the local provider answers instantly: a
+  // remote one will not, and the UI should already be shaped for that.
+  function fetchBoard(period, cb) {
+    var since = period === 'daily' ? startOfDay(Date.now())
+              : period === 'weekly' ? startOfWeek(Date.now())
+              : 0;
+    if (SCORES.provider === 'local') { cb(localBoard(since, 5), true); return; }
+    cb([], false);            // no remote provider wired up yet
+  }
+
   function addLifetime(n) {
     if (!n || n < 0) return;
     lifetime += n;
@@ -4152,6 +4300,84 @@
   function openHelp() { renderHelp(); helpEl.classList.remove('hidden'); }
   function closeHelp() { helpEl.classList.add('hidden'); }
 
+  // ---------------------------------------------------------- scores ----
+  function ago(ts) {
+    var mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    var days = Math.floor(hrs / 24);
+    return days === 1 ? 'yesterday' : days + 'd ago';
+  }
+
+  function boardHtml(rows) {
+    if (!rows.length) {
+      return '<div class="bempty">No runs yet in this window. ' +
+             'Finish a game and it will show up here.</div>';
+    }
+    var top = rows[0].score || 1, html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var m = MODES[r.mode] ? MODES[r.mode].name : r.mode;
+      html += '<div class="brow' + (i === 0 ? ' top' : '') + '">' +
+        '<span class="brank">' + r.rank + '</span>' +
+        '<span class="bmid">' +
+          '<span class="bscore">' + nfmt(r.score) + '</span>' +
+          '<div class="bmeta">' + m + ' &middot; ' + ago(r.at) + '</div>' +
+          '<div class="bbar"><i style="width:' +
+            clamp(r.score / top, 0, 1) * 100 + '%"></i></div>' +
+        '</span></div>';
+    }
+    return html;
+  }
+
+  function renderScores() {
+    var html = '';
+
+    html += '<div class="bigstat"><span class="k">Lifetime score</span>' +
+            '<span class="v">' + nfmt(lifetime) + '</span></div>';
+
+    // Best for each mode, straight from the same keys the HUD reads.
+    html += '<div class="hsection">Best run, by mode</div><div class="setgroup">';
+    for (var mid in MODES) {
+      if (!MODES[mid].tracksBest) continue;
+      html += '<div class="setrow"><span class="rlabel">' + MODES[mid].name + '</span>' +
+              '<span class="bscore">' + nfmt(loadBest(mid)) + '</span></div>';
+    }
+    html += '</div>';
+
+    var periods = [['daily', 'Today'], ['weekly', 'This week'], ['all', 'All time']];
+    for (var i = 0; i < periods.length; i++) {
+      (function (key, label) {
+        html += '<div class="hsection">' + label + '</div>' +
+                '<div class="setgroup" data-board="' + key + '">' +
+                '<div class="bempty">Loading\u2026</div></div>';
+      })(periods[i][0], periods[i][1]);
+    }
+
+    html += '<div class="globalnote"><b>These are your runs on this device.</b> ' +
+            'Daily and weekly charts across all players need a server to store ' +
+            'and rank them, which a page served as a single file cannot do on ' +
+            'its own. The boards are already wired to take one.</div>';
+
+    scoresBody.innerHTML = html;
+
+    // Filled through the provider, so a remote one slots in unchanged.
+    ['daily', 'weekly', 'all'].forEach(function (key) {
+      fetchBoard(key, function (rows) {
+        var box = scoresBody.querySelector('[data-board="' + key + '"]');
+        if (box) box.innerHTML = boardHtml(rows);
+      });
+    });
+  }
+
+  function openScores() { renderScores(); scoresEl.classList.remove('hidden'); }
+  function closeScores() { scoresEl.classList.add('hidden'); }
+
+  scoresBtn.addEventListener('click', openScores);
+  scoresClose.addEventListener('click', closeScores);
+
   // --------------------------------------------------------- loadout ----
   function nfmt(n) { return n.toLocaleString ? n.toLocaleString('en-US') : String(n); }
 
@@ -4310,7 +4536,8 @@
            !levelsEl.classList.contains('hidden') ||
            !helpEl.classList.contains('hidden') ||
            !loadoutSheet.classList.contains('hidden') ||
-           !buyPanel.classList.contains('hidden');
+           !buyPanel.classList.contains('hidden') ||
+           !scoresEl.classList.contains('hidden');
   }
 
   // ------------------------------------------------------- rewarded ads
@@ -4509,6 +4736,7 @@
     if (over) return;
     BPM = BPM_BASE; bpmTarget = BPM_BASE;
     addLifetime(score);
+    recordRun(mode.id, score);
     over = true;
     running = false;
     armed = null;
@@ -4665,6 +4893,7 @@
       else if (!setEl.classList.contains('hidden')) closeSettings();
       else if (!helpEl.classList.contains('hidden')) closeHelp();
       else if (!loadoutSheet.classList.contains('hidden')) closeLoadout();
+      else if (!scoresEl.classList.contains('hidden')) closeScores();
       else if (!modesEl.classList.contains('hidden')) closeModes();
       else if (!levelsEl.classList.contains('hidden')) closeLevels();
       else if (mode.id === 'puzzle') openLevels();
@@ -4709,6 +4938,16 @@
       openModes: openModes,
       openHelp: openHelp,
       openLoadout: openLoadout,
+      openScores: openScores,
+      runs: function () { return runs.slice(); },
+      setRuns: function (r) { runs = r; saveRuns(); },
+      recordRun: recordRun,
+      board: function (period) {
+        var out = null;
+        fetchBoard(period, function (rows) { out = rows; });
+        return out;
+      },
+      scoresProvider: SCORES,
       lifetime: function () { return lifetime; },
       setLifetime: function (v) { lifetime = v; try { localStorage.setItem(LIFE_KEY, String(v)); } catch (e) {} },
       unlockedIds: function () {
