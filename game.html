@@ -246,6 +246,72 @@
 
   /* ---------- Overlays ---------- */
   /* Timed-ability clock, pinned under the HUD so it never covers a circle. */
+  /* The Tower Defence shop lives inside the base strip. DOM rather than
+     canvas: they are buttons, and buttons want hit testing, focus and text
+     wrapping done for them. Starts a little below the base line so a circle
+     straddling it is still visible. */
+  #towerShop {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 3;
+    /* Has to fit INSIDE the base strip, which is 15% of the height -- 84px
+       on a 620px screen. Anything taller creeps over the line and hides
+       circles crossing it. */
+    padding: 4px 7px 5px;
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: 11px;
+  }
+  #towerShop.hidden { display: none; }
+  .tsline { display: flex; align-items: center; gap: 7px; height: 12px; }
+  .tsbar {
+    flex: 1 1 auto; height: 6px; border-radius: 3px;
+    background: rgba(255,255,255,0.14); overflow: hidden;
+  }
+  .tsbar i {
+    display: block; height: 100%; width: 100%;
+    background: var(--accent); transition: width .18s linear;
+  }
+  .tsbar.low i { background: var(--danger); }
+  .tshp { font-size: 10px; font-weight: 800; letter-spacing: .04em; color: var(--ink); }
+  .tslv {
+    font-size: 10px; font-weight: 800; color: var(--muted);
+    letter-spacing: .04em;
+  }
+  .tspops {
+    font-size: 11px; font-weight: 900; color: var(--gold);
+    min-width: 44px; text-align: right;
+  }
+  .tspops::after { content: ' pops'; font-size: 8px; font-weight: 800; opacity: .7; }
+  /* auto-fit rather than a fixed count: the row grew a fourth button and
+     has to stay on ONE line -- the base strip is not tall enough for two. */
+  .tsrow {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr));
+    gap: 5px;
+  }
+  .tsbtn {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--ink);
+    padding: 4px 3px; font: inherit; cursor: pointer;
+    display: grid; gap: 1px; justify-items: center; line-height: 1.1;
+  }
+  .tsbtn b { font-size: 9px; font-weight: 800; letter-spacing: 0; }
+  .tsbtn .tsval { font-size: 9.5px; font-weight: 900; color: var(--accent); }
+  .tsbtn .tscost { font-size: 8.5px; font-weight: 800; color: var(--gold); }
+  /* Affordable is the ONLY state that looks live -- the row is glanced at
+     mid-run, so "can I buy something" has to read without being parsed. */
+  .tsbtn.can { border-color: var(--gold); background: rgba(255,255,255,0.07); }
+  .tsbtn.cant { opacity: .55; }
+  .tsbtn.maxed { opacity: .7; border-style: dashed; }
+  .tsbtn.maxed .tscost { color: var(--muted); }
+  .tsbtn.locked { opacity: .45; border-style: dashed; }
+  .tsbtn.locked .tscost { color: var(--muted); }
+  .tspips { display: flex; gap: 2px; }
+  .tspips span {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+  }
+  .tspips span.on { background: var(--accent); }
+
   #buffBar {
     position: absolute;
     top: 0;
@@ -1274,6 +1340,11 @@
   .btn-sm { padding: 11px 22px; font-size: 11px; }
 
   /* ---------- Toast ---------- */
+  /* Lifted clear of the base strip while Tower Defence is up: at its normal
+     height it lands squarely on the shop, and the shop is a thing you read
+     and press mid-run. */
+  body.towering #toast { bottom: 108px; }
+
   #toast {
     position: absolute;
     left: 50%;
@@ -1327,6 +1398,15 @@
   <div id="wrap">
     <canvas id="game"></canvas>
     <div id="buffBar"></div>
+    <div id="towerShop" class="hidden">
+      <div class="tsline">
+        <div class="tsbar"><i id="tsHpFill"></i></div>
+        <span class="tshp" id="tsHp">100 / 100</span>
+        <span class="tslv" id="tsLv">Lv 1</span>
+        <span class="tspops" id="tsPops">0</span>
+      </div>
+      <div class="tsrow" id="tsRow"></div>
+    </div>
   </div>
 
   <div id="overlay">
@@ -1625,6 +1705,12 @@
   var setEl    = document.getElementById('settings');
   var setClose = document.getElementById('setClose');
   var fxPick   = document.getElementById('fxPick');
+  var towerShop= document.getElementById('towerShop');
+  var tsHpFill = document.getElementById('tsHpFill');
+  var tsHp     = document.getElementById('tsHp');
+  var tsPops   = document.getElementById('tsPops');
+  var tsLv     = document.getElementById('tsLv');
+  var tsRow    = document.getElementById('tsRow');
   var musicSw  = document.getElementById('musicSw');
   var musicVol = document.getElementById('musicVol');
   var musicVolVal=document.getElementById('musicVolVal');
@@ -1736,6 +1822,9 @@
   var BASE_FRAC = 0.15;       // of the screen height that is the base
   var BASE_MAX = 100;         // starting health
   var TOWER_GRAVITY = 0.5;    // multiple of normal fall speed
+
+  var CENTER_LEVEL = 20;      // before this, the third turret cannot be bought
+  var CENTER_COST = 2500;     // roughly what maxing the other three costs
 
   var TURRET_R = 30;          // the half-discs on the line
   var TURRET_EVERY = 0.85;    // seconds between shots, per turret
@@ -2330,14 +2419,19 @@
       spawnGap: function () { return Math.max(0.55, 1.60 - elapsed * 0.011); },
       hpRamp: 90,
       paysWithTime: false,
-      setup: function () { resetTowers(); },
+      setup: function () { resetShop(); resetTowers(); syncTowerShop(); },
       tick: function (dt) {
         updateTurrets(dt);
         updateBullets(dt);
         updateBase(dt);
       },
-      onPop: function () {},
-      onContinue: function () { resetTowers(); }
+      // Every kill pays its starting number, however it died. Turret kills
+      // are the core loop here, so unlike Rush's clock this cannot be
+      // limited to circles the player tapped.
+      onPop: function (c) { earnPops(c.maxHp); },
+      // A continue rebuilds the base but keeps what was earned and bought:
+      // losing the run is the reset, not surviving it.
+      onContinue: function () { resetTowers(); syncTowerShop(); }
     },
 
     kid: {
@@ -3804,10 +3898,32 @@
     baseFlash = 0;
     // Inset by their own radius: sitting flush against the wall, half the
     // dome falls off the canvas and they read as quarter-discs.
-    turrets = [
-      { x: TURRET_R, y: baseY(), cool: TURRET_EVERY * 0.5, level: 1 },
-      { x: W - TURRET_R, y: baseY(), cool: TURRET_EVERY, level: 1 }
-    ];
+    buildTurrets();
+  }
+
+  // Where each gun sits, as a fraction of the width. The centre one is
+  // bought, so the list is rebuilt rather than fixed.
+  function turretSlots() {
+    var slots = [0, 1];
+    if (lvOf('center')) slots.push(0.5);
+    return slots;
+  }
+  function slotX(f) { return TURRET_R + f * (W - TURRET_R * 2); }
+
+  // Keeps the cooldowns of guns that already existed, so buying the third
+  // does not hand the other two a free volley. Staggered on a fresh build,
+  // so they alternate rather than firing in lockstep.
+  function buildTurrets() {
+    var slots = turretSlots();
+    var next = [];
+    for (var i = 0; i < slots.length; i++) {
+      var keep = turrets[i];
+      next.push({
+        at: slots[i], x: slotX(slots[i]), y: baseY(),
+        cool: keep ? keep.cool : turretEvery() * (i / slots.length)
+      });
+    }
+    turrets = next;
   }
 
   // The turrets pick the circle closest to the base rather than the closest
@@ -3826,21 +3942,22 @@
     var i;
     for (i = 0; i < turrets.length; i++) {
       var t = turrets[i];
-      t.y = baseY();                        // both follow a resize
-      t.x = i === 0 ? TURRET_R : W - TURRET_R;
+      t.y = baseY();                        // all of them follow a resize
+      t.x = slotX(t.at);
       t.cool -= dt;
       if (t.cool > 0) continue;
 
       var target = turretTarget();
       if (!target) { t.cool = 0.15; continue; }   // nothing to shoot at yet
 
-      t.cool = TURRET_EVERY;
+      t.cool = turretEvery();
       var dx = target.x - t.x, dy = target.y - t.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
       if (d > TURRET_RANGE) continue;
+      var sp = bulletSpeed();
       bullets.push({
         x: t.x, y: t.y,
-        vx: (dx / d) * BULLET_SPEED, vy: (dy / d) * BULLET_SPEED,
+        vx: (dx / d) * sp, vy: (dy / d) * sp,
         life: 3
       });
       beep(900, 0.04, 'square', 0.03);
@@ -3869,7 +3986,7 @@
         bullets.splice(i, 1);
         if (c.boss) { deflect(c); break; }
 
-        c.hp -= TURRET_DAMAGE;
+        c.hp -= turretDamage();
         c.flash = Math.max(c.flash, 0.7);
         if (c.hp > 0) {
           burst(c.x, c.y, c.r * 0.35, activeTheme.accent, 3);
@@ -3899,6 +4016,7 @@
       var hit = Math.max(1, c.hp);
       baseHp -= hit;
       baseFlash = 1;
+      renderTowerShop();
       shake = Math.min(14, 4 + hit * 0.6);
       circles.splice(i, 1);
       burst(c.x, line, c.r, C_DANGER, 14);
@@ -3914,6 +4032,159 @@
 
     if (baseFlash > 0) baseFlash = Math.max(0, baseFlash - dt * 2.2);
   }
+
+  // ---- the base shop --------------------------------------------------
+  //
+  // Currency is pops: every circle destroyed pays its STARTING number, so a
+  // 5 is worth 5 however it died. Turret kills have to count -- they are the
+  // core loop of the mode -- so unlike Rush's clock this pays for every
+  // kill, not only tapped ones.
+  //
+  // Everything here is per run. Upgrades are earned and spent inside a
+  // single game and reset on retry, which is what makes the early minutes
+  // matter rather than being a formality once you have banked enough.
+  //
+  // Costs are geometric rather than hand-picked steps, so the path stays
+  // smooth: each tier is a little under twice the last, and the first tier
+  // of each is reachable inside the first minute.
+  //
+  var TOWER_UPGRADES = [
+    {
+      id: 'rate', name: 'Fire Rate', steps: 6, base: 45, growth: 1.62,
+      // Multiplicative, so every tier is worth the same proportion -- a flat
+      // subtraction would make the last tier enormous and the first dull.
+      value: function (lv) { return TURRET_EVERY * Math.pow(0.86, lv); },
+      show: function (lv) { return (1 / this.value(lv)).toFixed(1) + '/s'; }
+    },
+    {
+      id: 'speed', name: 'Shot Speed', steps: 6, base: 35, growth: 1.58,
+      value: function (lv) { return BULLET_SPEED * (1 + 0.17 * lv); },
+      show: function (lv) { return Math.round(this.value(lv) * 60) + 'px/s'; }
+    },
+    {
+      id: 'damage', name: 'Damage', steps: 4, base: 90, growth: 1.85,
+      value: function (lv) { return TURRET_DAMAGE + lv; },
+      show: function (lv) { return '×' + this.value(lv); }
+    },
+    {
+      // Not a ladder: one purchase, priced against maxing everything else,
+      // and shut until level 20 -- a little over six minutes in. Something
+      // to still be playing towards once the other three are done.
+      id: 'center', name: 'Mid Turret', steps: 1, base: CENTER_COST, growth: 1,
+      needLevel: CENTER_LEVEL,
+      value: function (lv) { return lv; },
+      show: function (lv) { return lv ? 'Built' : '3rd gun'; }
+    }
+  ];
+
+  var pops = 0;
+  var towerLv = {};
+
+  function upgradeById(id) {
+    for (var i = 0; i < TOWER_UPGRADES.length; i++) {
+      if (TOWER_UPGRADES[i].id === id) return TOWER_UPGRADES[i];
+    }
+    return null;
+  }
+  function lvOf(id) { return towerLv[id] || 0; }
+  // A locked upgrade is shown, priced and greyed rather than hidden: it is
+  // something to play towards, which it cannot be if you do not know it is
+  // there.
+  function upgradeLocked(u) { return !!u.needLevel && level() < u.needLevel; }
+  function upgradeCost(u) {
+    return Math.round(u.base * Math.pow(u.growth, lvOf(u.id)));
+  }
+  function maxed(u) { return lvOf(u.id) >= u.steps; }
+
+  // The live numbers the turrets actually read.
+  function turretEvery()  { return upgradeById('rate').value(lvOf('rate')); }
+  function bulletSpeed()  { return upgradeById('speed').value(lvOf('speed')); }
+  function turretDamage() { return upgradeById('damage').value(lvOf('damage')); }
+
+  function resetShop() {
+    pops = 0;
+    towerLv = {};
+    for (var i = 0; i < TOWER_UPGRADES.length; i++) towerLv[TOWER_UPGRADES[i].id] = 0;
+  }
+
+  function earnPops(n) {
+    pops += n;
+    renderTowerShop();
+  }
+
+  function buyUpgrade(id) {
+    var u = upgradeById(id);
+    if (!u || maxed(u)) return;
+    if (upgradeLocked(u)) {
+      toast(u.name + '  ·  unlocks at level ' + u.needLevel);
+      return;
+    }
+    var cost = upgradeCost(u);
+    if (pops < cost) {
+      toast('Need ' + (cost - pops) + ' more pops');
+      return;
+    }
+    pops -= cost;
+    towerLv[id] = lvOf(id) + 1;
+    if (id === 'center') buildTurrets();      // the third gun appears at once
+    renderTowerShop();
+    toast(u.name + '  ' + u.show(lvOf(id)));
+    beep(620, 0.09, 'sine', 0.07);
+    setTimeout(function () { beep(880, 0.14, 'sine', 0.06); }, 80);
+  }
+
+  function renderTowerShop() {
+    if (mode.id !== 'tower') return;
+
+    var frac = Math.max(0, baseHp / BASE_MAX);
+    tsHpFill.style.width = (frac * 100).toFixed(1) + '%';
+    tsHpFill.parentNode.classList.toggle('low', frac <= 0.35);
+    tsHp.textContent = baseHp + ' / ' + BASE_MAX;
+    tsPops.textContent = pops;
+    // The HUD shows the base here, not the level, so the level has to appear
+    // somewhere -- an upgrade gated on reaching one is meaningless otherwise.
+    tsLv.textContent = 'Lv ' + level();
+
+    var html = '';
+    for (var i = 0; i < TOWER_UPGRADES.length; i++) {
+      var u = TOWER_UPGRADES[i], lv = lvOf(u.id);
+      var done = maxed(u), shut = upgradeLocked(u), cost = upgradeCost(u);
+      var can = !done && !shut && pops >= cost;
+
+      var pips = '';
+      for (var k = 0; k < u.steps; k++) {
+        pips += '<span class="' + (k < lv ? 'on' : '') + '"></span>';
+      }
+
+      html += '<button class="tsbtn ' +
+                (done ? 'maxed' : shut ? 'locked' : can ? 'can' : 'cant') +
+                '" data-up="' + u.id + '">' +
+        '<b>' + u.name + '</b>' +
+        '<span class="tsval">' + u.show(lv) + '</span>' +
+        '<span class="tspips">' + pips + '</span>' +
+        '<span class="tscost">' +
+          (done ? 'MAX' : shut ? 'Lv ' + u.needLevel : cost) +
+        '</span>' +
+      '</button>';
+    }
+    tsRow.innerHTML = html;
+  }
+
+  function syncTowerShop() {
+    var on = mode.id === 'tower';
+    towerShop.classList.toggle('hidden', !on);
+    document.body.classList.toggle('towering', on);
+    if (on) renderTowerShop();
+  }
+
+  // Stops the press reaching the canvas: a tap anywhere in the playfield
+  // pops a circle, and buying an upgrade is not that.
+  towerShop.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+  towerShop.addEventListener('click', function (e) {
+    var btn = e.target.closest('.tsbtn');
+    if (!btn) return;
+    buyUpgrade(btn.getAttribute('data-up'));
+  });
 
   // ------------------------------------------------------------- traits --
   //
@@ -4806,23 +5077,12 @@
       ctx.strokeStyle = baseFlash > 0.05 ? C_DANGER : activeTheme.accent;
       ctx.stroke();
 
-      // Health, as a bar along the line and a number beside it.
-      var frac = Math.max(0, baseHp / BASE_MAX);
-      ctx.fillStyle = rgba('#ffffff', 0.12);
-      ctx.fillRect(0, by + 6, W, 5);
-      ctx.fillStyle = frac > 0.35 ? activeTheme.accent : C_DANGER;
-      ctx.fillRect(0, by + 6, W * frac, 5);
-
-      ctx.font = '800 15px Montserrat, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = frac > 0.35 ? activeTheme.ink : C_DANGER;
-      ctx.fillText(baseHp + ' / ' + BASE_MAX, W / 2, by + 30);
+      // Health and the shop are drawn in the DOM, over this strip.
 
       // Turrets: half-discs, flat side on the line, facing up the board.
       for (i = 0; i < turrets.length; i++) {
         var tu = turrets[i];
-        var ready = 1 - Math.max(0, Math.min(1, tu.cool / TURRET_EVERY));
+        var ready = 1 - Math.max(0, Math.min(1, tu.cool / turretEvery()));
         ctx.beginPath();
         ctx.arc(tu.x, tu.y, TURRET_R, Math.PI, Math.PI * 2);
         ctx.closePath();
@@ -7457,6 +7717,7 @@
     gesture = null; lassoPath = []; beams.length = 0; shards.length = 0;
     shocks.length = 0; traitDepth = 0;
     bullets.length = 0; baseHp = BASE_MAX; baseFlash = 0;
+    resetShop();
     hold = null; beatPhase = 0;
     echoLive = false; echoPending = null;
     for (var ck in cool) cool[ck] = 0;
@@ -7481,6 +7742,7 @@
     elLevelLabel.textContent = mode.hudLabel;
     elLevel.textContent = mode.hudValue();
     elLevel.classList.remove('urgent');
+    syncTowerShop();
     best = loadBest(mode.id);
     elBest.textContent = best;
     updateChain();
@@ -7799,6 +8061,17 @@
         });
       },
       bullets: function () { return bullets.length; },
+      pops: function () { return pops; },
+      setPops: function (v) { pops = v; renderTowerShop(); },
+      upgrades: TOWER_UPGRADES,
+      towerLv: function () { return JSON.parse(JSON.stringify(towerLv)); },
+      upgradeCost: function (id) { return upgradeCost(upgradeById(id)); },
+      upgradeLocked: function (id) { return upgradeLocked(upgradeById(id)); },
+      buyUpgrade: buyUpgrade,
+      turretStats: function () {
+        return { every: +turretEvery().toFixed(3), speed: +bulletSpeed().toFixed(2),
+                 damage: turretDamage() };
+      },
       hpCeiling: function () { return hpCeiling(); },
       capCreepStart: function () { return capCreepStart(); },
       capCreep: function () { return CAP_CREEP; },
