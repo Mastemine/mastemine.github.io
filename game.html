@@ -1770,7 +1770,11 @@
   //   * a timer does not start until the ability has finished being used --
   //     a live Lightning is not cooling down, it is still running.
   // Second Wind is absent on purpose -- it never recharges. See noRefill.
-  var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 60,
+  // Lightning keeps its three-minute cooldown even though the effect is
+  // now five seconds: in the charge-based modes scarcity IS the price, so
+  // a short burst you get rarely is the trade. Rush prices it in clock
+  // instead (see ABILITY_SECS), and there it was repriced to match.
+  var COOLDOWN = { bomb: 45, doubleTap: 60, freeze: 120, lightning: 180,
                    split: 50, overload: 150, sweep: 90, wildcard: 150,
                    slowmo: 100, fire: 60,
                    lasso: 110, slingshot: 55, laser: 70, charge: 65,
