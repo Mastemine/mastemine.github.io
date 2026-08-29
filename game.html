@@ -1012,6 +1012,63 @@
     color: var(--muted); font-variant-numeric: tabular-nums;
   }
   .acard.on .am { color: var(--accent); }
+  /* The card is a button, so the info toggle cannot live inside it -- nested
+     buttons are invalid. Both sit in a wrapper instead. */
+  .acell { position: relative; display: flex; }
+  .acell > .acard { flex: 1 1 auto; }
+  .acell.open { grid-column: 1 / -1; flex-direction: column; }
+
+  .ainfo {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    padding: 0;
+  }
+  .ainfo:hover { color: var(--ink); border-color: var(--muted); }
+  .acell.open .ainfo { color: var(--accent); border-color: var(--accent); }
+  .ainfo:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .adesc {
+    display: none;
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    background: var(--panel);
+    padding: 12px 14px 13px;
+    margin-top: -6px;
+  }
+  .acell.open .adesc { display: block; }
+  .acell.open > .acard { border-radius: 14px 14px 0 0; }
+  .adesc p { margin: 0; font-size: 11px; line-height: 1.65; color: var(--muted); }
+  .adesc p b { color: var(--ink); font-weight: 700; }
+  .adesc .facts {
+    margin-top: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .adesc .fact {
+    font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 300px;
+    padding: 4px 9px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .acard .slotno {
     position: absolute; top: 8px; right: 9px;
     font-size: 10px; font-weight: 800; color: var(--accent);
@@ -4249,19 +4306,24 @@
       'lands, the level turns over.' +
       '</div></div></div></div>';
 
-    html += '<div class="hsection">Abilities</div><div class="setgroup">';
-    for (var i = 0; i < order.length; i++) {
-      var id = order[i], a = ABILITIES[id];
-      if (a.needsMotion && !mode.spawns) continue;
-      html += '<div class="hrow">' +
-        '<div class="hicon">' + ICON[a.icon] + '</div>' +
-        '<div class="htext">' +
-          '<div class="hname">' + a.name + '</div>' +
-          '<div class="hdesc">' + ABILITY_WHAT[id] + '</div>' +
-          '<div class="hmeta">' + abilityMeta(id) + '</div>' +
-        '</div></div>';
-    }
-    html += '</div>';
+    html += '<div class="hsection">How abilities work</div><div class="setgroup">' +
+      '<div class="hrow"><div class="htext">' +
+        '<p class="hnote">You carry <b>' + SLOTS + '</b> abilities into a run, ' +
+        'chosen on the Loadout screen \u2014 that is also where each one is ' +
+        'described in full. They sit in the top bar in slot order, and the ' +
+        'number keys <b>1\u2013' + SLOTS + '</b> fire them.</p>' +
+
+        '<p class="hnote">They come in three shapes. <b>Aimed</b> ones are armed ' +
+        'first and spent on the next circle you tap, so arming is a decision ' +
+        'you can take back \u2014 tapping the button again refunds it. ' +
+        '<b>Timed</b> ones run on a clock, shown counting down on the button ' +
+        'and as a bar under the top bar. <b>Instant</b> ones just happen.</p>' +
+
+        '<p class="hnote">The small number on each button is how many charges ' +
+        'you have left. In <b>Rush</b> there are no charges at all: abilities ' +
+        'are unlimited but cost seconds off your clock, and the button shows ' +
+        'the price instead.</p>' +
+      '</div></div></div>';
 
     if (mode.recharges) {
       html += '<div class="hsection">Getting more</div><div class="setgroup">' +
@@ -4272,7 +4334,8 @@
           bossHp(BOSS_EVERY * 7) + '-tap boss pays ' +
           Math.floor(bossHp(BOSS_EVERY * 7) / BOSS_TAPS_PER_CHARGE) + '. ' +
           'A bounty can take you above what you started with, up to ' +
-          MAX_CHARGES + '.</p>' +
+          MAX_CHARGES + '. It never hands back an ability that does not ' +
+          'refill.</p>' +
           '<p class="hnote"><b>The recharge bar</b> under each button refills it ' +
           'on a timer. Three things to know: it only tops you back up to what ' +
           'you <b>started</b> with, so bounty surplus is yours to keep; it only ' +
@@ -4381,6 +4444,34 @@
   // --------------------------------------------------------- loadout ----
   function nfmt(n) { return n.toLocaleString ? n.toLocaleString('en-US') : String(n); }
 
+  // Which cards are showing their write-up. Kept out of the DOM so a
+  // re-render (selecting, buying the pack) does not collapse what you opened.
+  var openInfo = {};
+
+  // The detail is assembled from the same tables the game runs on, so it
+  // cannot drift when a duration or cooldown is retuned.
+  function abilityDetail(id) {
+    var a = ABILITIES[id], facts = [];
+
+    if (a.kind === 'targeted') facts.push('Aimed at a circle');
+    else if (a.kind === 'timed') facts.push('Lasts ' + a.secs + 's');
+    else facts.push('Instant');
+
+    if (mode.paysWithTime) {
+      facts.push('Costs ' + ABILITY_SECS[id] + 's');
+    } else {
+      facts.push(START_MAX[id] + (START_MAX[id] === 1 ? ' charge' : ' charges'));
+      if (a.noRefill) facts.push('Never refills');
+      else if (COOLDOWN[id]) facts.push('Recharges ' + secsLabel(COOLDOWN[id]));
+    }
+    if (!unlocked(id)) facts.push('Unlock at ' + nfmt(UNLOCK_AT[id]));
+    if (a.needsMotion) facts.push('Not in Puzzle');
+
+    var out = '<p>' + ABILITY_WHAT[id] + '</p><div class="facts">';
+    for (var i = 0; i < facts.length; i++) out += '<span class="fact">' + facts[i] + '</span>';
+    return out + '</div>';
+  }
+
   function renderLoadout() {
     var ids = Object.keys(ABILITIES).sort(function (a, b) {
       return (UNLOCK_AT[a] || 0) - (UNLOCK_AT[b] || 0);
@@ -4422,13 +4513,19 @@
            (a.noRefill ? ' \u00b7 never refills' : ''))
         : 'Unlock at ' + nfmt(UNLOCK_AT[id]);
 
-      html += '<button class="acard' + (slot >= 0 ? ' on' : '') + '" data-ab="' + id + '"' +
-        (open ? '' : ' disabled') + '>' +
-        (slot >= 0 ? '<span class="slotno">' + (slot + 1) + '</span>' : '') +
-        '<span class="aico">' + ICON[a.icon] + '</span>' +
-        '<span class="an">' + a.name + '</span>' +
-        '<span class="am">' + meta + '</span>' +
-      '</button>';
+      html += '<div class="acell' + (openInfo[id] ? ' open' : '') + '">' +
+        '<button class="acard' + (slot >= 0 ? ' on' : '') + '" data-ab="' + id + '"' +
+          (open ? '' : ' disabled') + '>' +
+          (slot >= 0 ? '<span class="slotno">' + (slot + 1) + '</span>' : '') +
+          '<span class="aico">' + ICON[a.icon] + '</span>' +
+          '<span class="an">' + a.name + '</span>' +
+          '<span class="am">' + meta + '</span>' +
+        '</button>' +
+        '<button class="ainfo" data-info="' + id + '" aria-expanded="' +
+          (openInfo[id] ? 'true' : 'false') + '" aria-label="About ' + a.name + '">' +
+          (openInfo[id] ? '\u2715' : '?') + '</button>' +
+        '<div class="adesc">' + abilityDetail(id) + '</div>' +
+      '</div>';
     }
     loadoutGrid.innerHTML = html;
   }
@@ -4441,6 +4538,15 @@
   function closeLoadout() { loadoutSheet.classList.add('hidden'); }
 
   loadoutGrid.addEventListener('click', function (e) {
+    // The info toggle sits beside the card, not inside it, so check it first.
+    var info = e.target.closest('.ainfo');
+    if (info) {
+      var iid = info.getAttribute('data-info');
+      openInfo[iid] = !openInfo[iid];
+      renderLoadout();
+      return;
+    }
+
     var card = e.target.closest('.acard');
     if (!card || card.disabled) return;
     var id = card.getAttribute('data-ab');
