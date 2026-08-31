@@ -820,6 +820,49 @@
   #levelTop { padding: 0 4px 4px; }
 
   /* ---------- Settings ---------- */
+  #tutorial {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--app-top) 0%, var(--app-bot) 100%);
+  }
+  #tutorial.hidden { display: none; }
+  .tutbody {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    padding: 0 16px; display: flex; flex-direction: column; gap: 14px;
+  }
+  /* The sample gets a real slab of the panel: it is the point of the page,
+     and the text is the caption rather than the other way round. */
+  #tutCanvas {
+    width: 100%; height: 190px; flex: 0 0 auto;
+    border: 1px solid var(--line); border-radius: 14px;
+    background: var(--surface); display: block;
+  }
+  #tutText {
+    margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted);
+  }
+  #tutText b { color: var(--ink); font-weight: 800; }
+  #tutText i { color: var(--ink); font-style: normal; font-weight: 700; }
+  .tutfoot {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    padding: 14px 16px 18px;
+  }
+  .tutfoot .btn { flex: 0 0 auto; }
+  .tutdots { flex: 1 1 auto; display: flex; justify-content: center; gap: 6px; }
+  .tutdots span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+  }
+  .tutdots span.on { background: var(--accent); }
+  /* A quiet marker on the menu button until the walkthrough has been read. */
+  #tutBtn.fresh { position: relative; }
+  #tutBtn.fresh::after {
+    content: ''; position: absolute; top: 6px; right: 8px;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  }
+
   #awards {
     position: absolute;
     inset: 0;
@@ -1439,6 +1482,7 @@
         <button class="btn btn-ghost" id="settingsBtn">Settings</button>
         <button class="btn btn-ghost" id="scoresBtn">Scores</button>
         <button class="btn btn-ghost" id="loadoutBtn">Loadout</button>
+        <button class="btn btn-ghost" id="tutBtn">Tutorial</button>
         <button class="btn btn-ghost" id="awardsBtn">Awards</button>
         <button class="btn btn-ghost" id="helpBtn">Help</button>
       </div>
@@ -1528,6 +1572,27 @@
     </div>
     <div id="levelTop"></div>
     <div class="storegrid" id="levelGrid"></div>
+  </div>
+
+  <div id="tutorial" class="hidden">
+    <div class="storehead">
+      <div>
+        <div class="eyebrow">Walkthrough</div>
+        <h2 id="tutTitle">How it works</h2>
+      </div>
+      <button class="iconbtn" id="tutClose" aria-label="Close tutorial">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="tutbody">
+      <canvas id="tutCanvas"></canvas>
+      <p id="tutText"></p>
+    </div>
+    <div class="tutfoot">
+      <button class="btn btn-ghost btn-sm" id="tutPrev">Back</button>
+      <div class="tutdots" id="tutDots"></div>
+      <button class="btn btn-sm" id="tutNext">Next</button>
+    </div>
   </div>
 
   <div id="awards" class="hidden">
@@ -1686,6 +1751,15 @@
   var levelTop = document.getElementById('levelTop');
   var helpBtn  = document.getElementById('helpBtn');
   var awardsBtn = document.getElementById('awardsBtn');
+  var tutEl    = document.getElementById('tutorial');
+  var tutTitle = document.getElementById('tutTitle');
+  var tutText  = document.getElementById('tutText');
+  var tutCanvas= document.getElementById('tutCanvas');
+  var tutDots  = document.getElementById('tutDots');
+  var tutPrev  = document.getElementById('tutPrev');
+  var tutNext  = document.getElementById('tutNext');
+  var tutClose = document.getElementById('tutClose');
+  var tutBtn   = document.getElementById('tutBtn');
   var awardsEl = document.getElementById('awards');
   var awardsClose = document.getElementById('awardsClose');
   var awardsTop = document.getElementById('awardsTop');
@@ -1766,6 +1840,10 @@
     bomb:  '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.9 1.3a.7.7 0 0 1 1 0l.6.6.5-.5a.7.7 0 1 1 1 1l-.5.5.6.6a.7.7 0 0 1-1 1l-.9-.9-.83.83a5.2 5.2 0 1 1-1-1l.83-.83-.9-.9a.7.7 0 0 1 0-1zM6.4 5.6a3.8 3.8 0 0 0-1.5 1.9.6.6 0 0 0 1.13.4A2.6 2.6 0 0 1 7 6.65a.6.6 0 1 0-.6-1.04z"/></svg>',
     sndOff:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 5.5H1.8v5H4l3.5 3z" fill="currentColor"/><path d="m10.6 6.2 3.6 3.6M14.2 6.2l-3.6 3.6"/></svg>'
   };
+
+  // Set by ?debug. Gates the test hooks, and suppresses the first-run
+  // walkthrough so automation is never blocked by it.
+  var DEBUG = /(^|[?&])debug(=|&|$)/.test(location.search);
 
   var W = 0, H = 0, dpr = 1;
 
@@ -2092,6 +2170,10 @@
   ];
 
   function hpColor(hp) {
+    // Before applyTheme() has run there is no palette at all. Returning a
+    // colour beats throwing: this is called from every painter, and an
+    // ordering slip should not be able to take out the whole of startup.
+    if (!PALETTE.length) return '#8b95b8';
     var i = Math.max(0, hp - 1);
     if (i < PALETTE.length) return PALETTE[i];
     // Past the palette, run through it again in a different tone -- and,
@@ -4929,140 +5011,19 @@
     // Chain halos. Once a circle has been tapped its face no longer shows
     // the number it started on, so without this the chain is guesswork.
     if (chainLen >= 1) {
-      var pulse = 0.42 + 0.20 * Math.sin(chainPulse);
-      ctx.strokeStyle = rgba(activeTheme.gold, pulse.toFixed(3));
       for (var h = 0; h < circles.length; h++) {
-        var hc = circles[h];
-        if (hc.maxHp !== chainVal) continue;
-        var hr = hc.r * (1 + hc.flash * 0.14) + Math.max(3, hc.r * 0.10);
-        ctx.beginPath();
-        ctx.arc(hc.x, hc.y, hr, 0, Math.PI * 2);
-        ctx.lineWidth = Math.max(1.6, hc.r * 0.055);
-        ctx.stroke();
+        if (circles[h].maxHp === chainVal) paintHalo(ctx, circles[h]);
       }
     }
 
     // Circles.
-    for (var i = 0; i < circles.length; i++) {
-      var c = circles[i];
-      var scale = 1 + c.flash * 0.14;
-      var r = c.r * scale;
-      var col = hpColor(c.hp);
-
-      // Body: lighter at the top, darker at the bottom.
-      var grad = ctx.createLinearGradient(c.x, c.y - r, c.x, c.y + r);
-      grad.addColorStop(0, shade(col, 0.30));
-      grad.addColorStop(0.45, col);
-      grad.addColorStop(1, shade(col, -0.40));
-
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      // Soft gloss, clipped to the ball.
-      ctx.save();
-      ctx.clip();
-      var hx = c.x - r * 0.30, hy = c.y - r * 0.44;
-      var hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, r * 0.9);
-      hg.addColorStop(0, 'rgba(255,255,255,0.40)');
-      hg.addColorStop(0.6, 'rgba(255,255,255,0.06)');
-      hg.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = hg;
-      ctx.fillRect(c.x - r, c.y - r, r * 2, r * 2);
-      ctx.restore();
-
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.lineWidth = Math.max(1.5, r * 0.06);
-      ctx.strokeStyle = 'rgba(255,255,255,' + (0.28 + c.flash * 0.6).toFixed(3) + ')';
-      ctx.stroke();
-
-      if (c.boss) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, r + Math.max(5, r * 0.10), 0, Math.PI * 2);
-        ctx.setLineDash([r * 0.22, r * 0.16]);
-        ctx.lineDashOffset = -chainPulse * 7;
-        ctx.lineWidth = Math.max(2.5, r * 0.055);
-        ctx.strokeStyle = rgba(activeTheme.gold, (0.65 + 0.25 * Math.sin(chainPulse)).toFixed(3));
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // A trait marker: colour, dash pattern AND ring count together. Five
-      // effects is more than hue and dash can carry on their own, and every
-      // one of them changes what you should do about the circle. It
-      // breathes, so a marked circle catches the eye in a crowded pile.
-      if (c.trait && TRAITS[c.trait]) {
-        var tr = TRAITS[c.trait];
-        var pulse = 0.72 + 0.28 * Math.sin(chainPulse * 1.6 + c.wobble);
-        ctx.save();
-        ctx.lineWidth = Math.max(2.2, r * 0.07);
-        ctx.strokeStyle = rgba(tr.ring, pulse.toFixed(3));
-        if (tr.dash) {
-          ctx.setLineDash([r * tr.dash, r * tr.dash * 0.6]);
-          ctx.lineDashOffset = -chainPulse * 5;
-        }
-        for (var ri = 0; ri < (tr.rings || 1); ri++) {
-          ctx.beginPath();
-          ctx.arc(c.x, c.y, r + Math.max(4, r * 0.11) + ri * Math.max(4, r * 0.13),
-                  0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-
-      if (c.flash > 0) {
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,' + (c.flash * 0.38).toFixed(3) + ')';
-        ctx.fill();
-      }
-
-      // Taps remaining.
-      var fs = r * (c.hp >= 100 ? 0.54 : c.hp >= 10 ? 0.72 : 0.95);
-      ctx.font = '800 ' + fs.toFixed(1) + 'px Montserrat, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = C_NUM_SHADOW;
-      ctx.fillText(c.hp, c.x, c.y + Math.max(1, r * 0.045));
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(c.hp, c.x, c.y);
-    }
+    for (var i = 0; i < circles.length; i++) paintCircle(ctx, circles[i]);
 
     // Iced circles: a rime ring and a few spikes, so a pinned circle reads
     // as frozen rather than as one that simply stopped.
     for (i = 0; i < circles.length; i++) {
-      var ic = circles[i];
-      if (!(ic.iced > 0)) continue;
-      // Thaws out over the last moment. Kept short relative to SHARD_SECS,
-      // or a five-second freeze would look like it is already melting for
-      // a quarter of its life.
-      var melt = Math.min(1, ic.iced / 0.7);
-      ctx.save();
-      ctx.globalAlpha = melt;
-      ctx.beginPath();
-      ctx.arc(ic.x, ic.y, ic.r + 3, 0, Math.PI * 2);
-      ctx.strokeStyle = ICE;
-      ctx.lineWidth = 2.4;
-      ctx.stroke();
-      ctx.fillStyle = rgba(ICE, 0.14);
-      ctx.fill();
-
-      ctx.strokeStyle = rgba(ICE, 0.85);
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      for (var sp = 0; sp < 6; sp++) {
-        var sa = ic.wobble + sp * Math.PI / 3;
-        ctx.beginPath();
-        ctx.moveTo(ic.x + Math.cos(sa) * (ic.r + 1), ic.y + Math.sin(sa) * (ic.r + 1));
-        ctx.lineTo(ic.x + Math.cos(sa) * (ic.r + 9), ic.y + Math.sin(sa) * (ic.r + 9));
-        ctx.stroke();
-      }
-      ctx.restore();
+      if (circles[i].iced > 0) paintIce(ctx, circles[i]);
     }
-
     // Blast shockwaves: a ring racing outward from where it went off.
     for (i = 0; i < shocks.length; i++) {
       var sk = shocks[i];
@@ -5388,6 +5349,140 @@
       ctx.fillStyle = rgba(C_DANGER, (flashOver * 0.5).toFixed(3));
       ctx.fillRect(0, 0, W, H);
     }
+  }
+
+  // ---- circle painters -------------------------------------------------
+  //
+  // Pulled out of draw()'s loop so the tutorial can render the real thing
+  // instead of describing it. One implementation, two callers -- a ring
+  // explained in the tutorial cannot drift from the ring on the board,
+  // because they are the same code. The context is passed in rather than
+  // taken from the module, so a sample can be drawn onto its own canvas.
+  //
+  function paintCircle(g, c) {
+    var scale = 1 + c.flash * 0.14;
+    var r = c.r * scale;
+    var col = hpColor(c.hp);
+
+    // Body: lighter at the top, darker at the bottom.
+    var grad = g.createLinearGradient(c.x, c.y - r, c.x, c.y + r);
+    grad.addColorStop(0, shade(col, 0.30));
+    grad.addColorStop(0.45, col);
+    grad.addColorStop(1, shade(col, -0.40));
+
+    g.beginPath();
+    g.arc(c.x, c.y, r, 0, Math.PI * 2);
+    g.fillStyle = grad;
+    g.fill();
+
+    // Soft gloss, clipped to the ball.
+    g.save();
+    g.clip();
+    var hx = c.x - r * 0.30, hy = c.y - r * 0.44;
+    var hg = g.createRadialGradient(hx, hy, 0, hx, hy, r * 0.9);
+    hg.addColorStop(0, 'rgba(255,255,255,0.40)');
+    hg.addColorStop(0.6, 'rgba(255,255,255,0.06)');
+    hg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = hg;
+    g.fillRect(c.x - r, c.y - r, r * 2, r * 2);
+    g.restore();
+
+    g.beginPath();
+    g.arc(c.x, c.y, r, 0, Math.PI * 2);
+    g.lineWidth = Math.max(1.5, r * 0.06);
+    g.strokeStyle = 'rgba(255,255,255,' + (0.28 + c.flash * 0.6).toFixed(3) + ')';
+    g.stroke();
+
+    if (c.boss) {
+      g.save();
+      g.beginPath();
+      g.arc(c.x, c.y, r + Math.max(5, r * 0.10), 0, Math.PI * 2);
+      g.setLineDash([r * 0.22, r * 0.16]);
+      g.lineDashOffset = -chainPulse * 7;
+      g.lineWidth = Math.max(2.5, r * 0.055);
+      g.strokeStyle = rgba(activeTheme.gold, (0.65 + 0.25 * Math.sin(chainPulse)).toFixed(3));
+      g.stroke();
+      g.restore();
+    }
+
+    // A trait marker: colour, dash pattern AND ring count together. Five
+    // effects is more than hue and dash can carry on their own, and every
+    // one of them changes what you should do about the circle. It
+    // breathes, so a marked circle catches the eye in a crowded pile.
+    if (c.trait && TRAITS[c.trait]) {
+      var tr = TRAITS[c.trait];
+      var pulse = 0.72 + 0.28 * Math.sin(chainPulse * 1.6 + c.wobble);
+      g.save();
+      g.lineWidth = Math.max(2.2, r * 0.07);
+      g.strokeStyle = rgba(tr.ring, pulse.toFixed(3));
+      if (tr.dash) {
+        g.setLineDash([r * tr.dash, r * tr.dash * 0.6]);
+        g.lineDashOffset = -chainPulse * 5;
+      }
+      for (var ri = 0; ri < (tr.rings || 1); ri++) {
+        g.beginPath();
+        g.arc(c.x, c.y, r + Math.max(4, r * 0.11) + ri * Math.max(4, r * 0.13),
+              0, Math.PI * 2);
+        g.stroke();
+      }
+      g.restore();
+    }
+
+    if (c.flash > 0) {
+      g.beginPath();
+      g.arc(c.x, c.y, r, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(255,255,255,' + (c.flash * 0.38).toFixed(3) + ')';
+      g.fill();
+    }
+
+    // Taps remaining.
+    var fs = r * (c.hp >= 100 ? 0.54 : c.hp >= 10 ? 0.72 : 0.95);
+    g.font = '800 ' + fs.toFixed(1) + 'px Montserrat, system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = C_NUM_SHADOW;
+    g.fillText(c.hp, c.x, c.y + Math.max(1, r * 0.045));
+    g.fillStyle = '#ffffff';
+    g.fillText(c.hp, c.x, c.y);
+  }
+
+  function paintIce(g, ic) {
+    // Thaws out over the last moment. Kept short relative to SHARD_SECS,
+    // or a five-second freeze would look like it is already melting for
+    // a quarter of its life.
+    var melt = Math.min(1, ic.iced / 0.7);
+    g.save();
+    g.globalAlpha = melt;
+    g.beginPath();
+    g.arc(ic.x, ic.y, ic.r + 3, 0, Math.PI * 2);
+    g.strokeStyle = ICE;
+    g.lineWidth = 2.4;
+    g.stroke();
+    g.fillStyle = rgba(ICE, 0.14);
+    g.fill();
+
+    g.strokeStyle = rgba(ICE, 0.85);
+    g.lineWidth = 2;
+    g.lineCap = 'round';
+    for (var sp = 0; sp < 6; sp++) {
+      var sa = ic.wobble + sp * Math.PI / 3;
+      g.beginPath();
+      g.moveTo(ic.x + Math.cos(sa) * (ic.r + 1), ic.y + Math.sin(sa) * (ic.r + 1));
+      g.lineTo(ic.x + Math.cos(sa) * (ic.r + 9), ic.y + Math.sin(sa) * (ic.r + 9));
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  // The gold halo that marks circles which would continue the live chain.
+  function paintHalo(g, hc) {
+    var pulse = 0.42 + 0.20 * Math.sin(chainPulse);
+    var hr = hc.r * (1 + hc.flash * 0.14) + Math.max(3, hc.r * 0.10);
+    g.strokeStyle = rgba(activeTheme.gold, pulse.toFixed(3));
+    g.beginPath();
+    g.arc(hc.x, hc.y, hr, 0, Math.PI * 2);
+    g.lineWidth = Math.max(1.6, hc.r * 0.055);
+    g.stroke();
   }
 
   // amt < 0 darkens toward black, amt > 0 lightens toward white.
@@ -7149,6 +7244,301 @@
     if (!achTimer) announceAchievement();
   }
 
+  // ---------------------------------------------------------- tutorial ---
+  //
+  // A short walkthrough. Every picture in it is drawn by the game's OWN
+  // painters against real circle objects -- paintCircle, paintIce, paintHalo
+  // -- so a ring explained here cannot drift from the ring on the board.
+  // That is the whole design: no swatches, no screenshots, no prose
+  // describing a colour. The same code, at a smaller size.
+  //
+  // A page is { title, body, draw(g, w, h) }. Adding one is a row.
+  //
+  function tutCircle(x, y, r, hp, extra) {
+    var c = { x: x, y: y, px: x, py: y, r: r, m: r * r,
+              hp: hp, maxHp: hp, flash: 0, entered: true, wobble: x * 0.07 };
+    for (var k in extra) c[k] = extra[k];
+    return c;
+  }
+
+  // A caption under a sample, in the sample's own colour.
+  function tutLabel(g, text, x, y, colour) {
+    g.font = '800 10px Montserrat, system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = colour || activeTheme.muted;
+    g.fillText(text, x, y);
+  }
+
+  var TUTORIAL = [
+    {
+      title: 'Tap the number down',
+      body: 'Every circle shows how many taps it still needs. At zero it pops. ' +
+            'They pile up as they fall, and if the pile reaches the top of the ' +
+            'screen the run is over.',
+      draw: function (g, w, h) {
+        var y = h * 0.45, r = Math.min(30, h * 0.22);
+        var xs = [w * 0.25, w * 0.5, w * 0.75];
+        var hps = [5, 3, 1];
+        for (var i = 0; i < 3; i++) paintCircle(g, tutCircle(xs[i], y, r, hps[i]));
+        tutLabel(g, 'three taps later', w / 2, y + r + 16);
+      }
+    },
+    {
+      title: 'The green line is a clock',
+      body: 'It sweeps from the top to the floor once every ' + LEVEL_SECS +
+            ' seconds. When it lands, the level goes up: circles arrive a ' +
+            'little faster and their numbers creep higher. Green because it ' +
+            'is a clock, not a warning — the red glow along the top edge is ' +
+            'the warning.',
+      draw: function (g, w, h) {
+        var lg = g.createLinearGradient(0, 0, 0, h * 0.34);
+        lg.addColorStop(0, rgba(C_DANGER, 0.5));
+        lg.addColorStop(1, rgba(C_DANGER, 0));
+        g.fillStyle = lg;
+        g.fillRect(0, 0, w, h * 0.34);
+        tutLabel(g, 'danger', w / 2, h * 0.14, C_DANGER);
+
+        var ly = h * 0.66;
+        g.fillStyle = LEVEL_GREEN;
+        g.fillRect(0, ly - 1.5, w, 3);
+        tutLabel(g, 'next level', w / 2, ly + 16, LEVEL_GREEN);
+      }
+    },
+    {
+      title: 'Abilities come in three shapes',
+      body: 'You carry ' + SLOTS + ' into a run, chosen on the Loadout screen — ' +
+            'which is also where each one is described in full. ' +
+            '<b>Aimed</b> ones are armed first and spent on the next circle ' +
+            'you tap, so arming is a decision you can take back. ' +
+            '<b>Timed</b> ones run on a clock. <b>Instant</b> ones just happen. ' +
+            'A few are drawn instead of tapped: Lasso wants a loop, Laser Cut ' +
+            'a straight drag, Charge Shot a held press.',
+      draw: function (g, w, h) {
+        var y = h * 0.42, r = Math.min(26, h * 0.2);
+        var c = tutCircle(w * 0.5, y, r, 6);
+        paintCircle(g, c);
+        // the arming glow an aimed ability puts on the board
+        g.save();
+        g.setLineDash([6, 5]);
+        g.lineWidth = 2;
+        g.strokeStyle = rgba(activeTheme.accent, 0.9);
+        g.beginPath();
+        g.arc(c.x, c.y, r + 12, 0, Math.PI * 2);
+        g.stroke();
+        g.restore();
+        tutLabel(g, 'armed — the next circle you tap', w / 2, y + r + 26);
+      }
+    },
+    {
+      title: 'A ring means the circle does something',
+      body: 'About one falling circle in ' + Math.round(1 / TRAIT_CHANCE) +
+            ' carries an effect that fires when ' +
+            'it pops. They are told apart by colour, dash pattern <i>and</i> ' +
+            'ring count together — never colour alone. Two of them help you ' +
+            'and one charges you, so the ring is a decision.',
+      draw: function (g, w, h) {
+        var ids = ['blast', 'seed', 'bounty', 'static', 'drill'];
+        var names = ['Blast', 'Seeder', 'Bounty', 'Static', 'Drill'];
+        var r = Math.min(21, w / 16);
+        var y = h * 0.40;
+        for (var i = 0; i < ids.length; i++) {
+          var x = w * (i + 0.5) / ids.length;
+          paintCircle(g, tutCircle(x, y, r, 4, { trait: ids[i] }));
+          tutLabel(g, names[i], x, y + r + 15, TRAITS[ids[i]].ring);
+        }
+      }
+    },
+    {
+      title: 'What each one does',
+      body: '<b>Blast</b> damages and shoves everything nearby. ' +
+            '<b>Seeder</b> leaves three smaller circles behind — the one that ' +
+            'costs you. <b>Bounty</b> hands back a charge of an ability. ' +
+            '<b>Static</b> arcs to three circles anywhere on the board. ' +
+            '<b>Drill</b> clears a shaft straight up the screen, which is the ' +
+            'one aimed at a pile creeping toward the top.',
+      draw: function (g, w, h) {
+        var r = Math.min(24, h * 0.19);
+        var cx = w * 0.5, cy = h * 0.46;
+        // a drill and the shaft it opens
+        g.save();
+        g.globalAlpha = 0.32;
+        g.fillStyle = TRAITS.drill.ring;
+        g.fillRect(cx - r * 1.15, 0, r * 2.3, cy);
+        g.restore();
+        paintCircle(g, tutCircle(cx, cy, r, 3, { trait: 'drill' }));
+        tutLabel(g, 'everything in the shaft takes 1', w / 2, cy + r + 18);
+      }
+    },
+    {
+      title: 'Gold rings are special',
+      body: 'A <b>dashed gold</b> ring is a boss: no ability touches it, so it ' +
+            'comes down on plain taps only. A <b>thin gold halo</b> is ' +
+            'something else entirely — it marks circles that would continue ' +
+            'your chain. Once a circle has been tapped its face no longer ' +
+            'shows the number it started on, and chains key on that starting ' +
+            'number, so the halo is the only way to see them.',
+      draw: function (g, w, h) {
+        var r = Math.min(38, h * 0.28), y = h * 0.40;
+        paintCircle(g, tutCircle(w * 0.29, y, r, 24, { boss: true }));
+        tutLabel(g, 'boss — taps only', w * 0.29, y + r + 18, activeTheme.gold);
+
+        var hc = tutCircle(w * 0.71, y, r, 2);
+        hc.maxHp = 6;                     // tapped down: face and start differ
+        paintCircle(g, hc);
+        paintHalo(g, hc);
+        tutLabel(g, 'halo — started on a 6', w * 0.71, y + r + 18, activeTheme.gold);
+      }
+    },
+    {
+      title: 'Frozen circles shatter',
+      body: 'Ice Shards freezes a circle where it stands, in mid-air if that ' +
+            'is where it was. Pop it and it bursts into shards that freeze ' +
+            'and damage whatever they reach — and popping one of those throws ' +
+            'more. A rimed ring with spikes is a circle worth breaking.',
+      draw: function (g, w, h) {
+        var r = Math.min(28, h * 0.21), y = h * 0.44;
+        var ic = tutCircle(w * 0.5, y, r, 4, { iced: 9 });
+        paintCircle(g, ic);
+        paintIce(g, ic);
+        // a few shards on their way out
+        for (var i = 0; i < 6; i++) {
+          var a = i * Math.PI / 3 + 0.4;
+          var d = r + 26;
+          // save/restore around each one -- rebuilding the transform by hand
+          // would have to know the device pixel ratio the caller set up.
+          g.save();
+          g.translate(ic.x + Math.cos(a) * d, ic.y + Math.sin(a) * d);
+          g.rotate(a);
+          g.beginPath();
+          g.moveTo(7, 0); g.lineTo(0, 3); g.lineTo(-5, 0); g.lineTo(0, -3);
+          g.closePath();
+          g.fillStyle = ICE;
+          g.fill();
+          g.restore();
+        }
+        tutLabel(g, 'pop it to shatter', w / 2, y + r + 30);
+      }
+    }
+  ];
+
+  // ---- tutorial paging -------------------------------------------------
+  //
+  // Every page redraws on a rAF while the panel is open, because the samples
+  // breathe: the trait rings pulse, the boss ring rotates its dash, the halo
+  // fades in and out. A still frame of any of them would be a different
+  // picture from the one on the board.
+  //
+  var tutPage = 0;
+  var tutRaf = null;
+  var TUT_KEY = 'popTutorialSeen';
+
+  function tutSeen() {
+    try { return !!localStorage.getItem(TUT_KEY); } catch (e) { return true; }
+  }
+  function markTutSeen() {
+    try { localStorage.setItem(TUT_KEY, String(Date.now())); } catch (e) {}
+  }
+
+  function drawTutPage() {
+    var p = TUTORIAL[tutPage];
+    if (!p) return;
+
+    var w = tutCanvas.clientWidth || 320;
+    var h = tutCanvas.clientHeight || 190;
+    var d = Math.min(2, window.devicePixelRatio || 1);
+    if (tutCanvas.width !== Math.round(w * d)) {
+      tutCanvas.width = Math.round(w * d);
+      tutCanvas.height = Math.round(h * d);
+    }
+    var g = tutCanvas.getContext('2d');
+    g.setTransform(d, 0, 0, d, 0, 0);
+    g.clearRect(0, 0, w, h);
+    p.draw(g, w, h);
+  }
+
+  function stepTut() {
+    // The samples read chainPulse, which only advances while a run is being
+    // played. Nudge it here so they animate on the menu too.
+    chainPulse += 0.045;
+    drawTutPage();
+    tutRaf = requestAnimationFrame(stepTut);
+  }
+
+  function renderTut() {
+    var p = TUTORIAL[tutPage];
+    tutTitle.textContent = p.title;
+    tutText.innerHTML = p.body;
+
+    var dots = '';
+    for (var i = 0; i < TUTORIAL.length; i++) {
+      dots += '<span class="' + (i === tutPage ? 'on' : '') + '"></span>';
+    }
+    tutDots.innerHTML = dots;
+
+    tutPrev.disabled = tutPage === 0;
+    tutNext.textContent = tutPage === TUTORIAL.length - 1 ? 'Done' : 'Next';
+    drawTutPage();
+  }
+
+  function openTutorial(from) {
+    tutPage = 0;
+    renderTut();
+    tutEl.classList.remove('hidden');
+    if (tutRaf === null) tutRaf = requestAnimationFrame(stepTut);
+  }
+
+  function closeTutorial() {
+    if (tutRaf !== null) { cancelAnimationFrame(tutRaf); tutRaf = null; }
+    tutEl.classList.add('hidden');
+    markTutSeen();
+    tutBtn.classList.remove('fresh');
+    // Reaching it from the title screen should put the title screen back.
+    if (!started || over) overlay.classList.remove('hidden');
+  }
+
+  function tutStep(by) {
+    var next = tutPage + by;
+    if (next < 0) return;
+    if (next >= TUTORIAL.length) { closeTutorial(); return; }
+    tutPage = next;
+    renderTut();
+  }
+
+  tutBtn.addEventListener('click', function () {
+    overlay.classList.add('hidden');
+    openTutorial('menu');
+  });
+
+  // Opened once, unprompted, for a genuinely new player -- nothing stored at
+  // all, not merely "has not read the tutorial". Somebody returning after
+  // clearing one key should not be handed a walkthrough they finished weeks
+  // ago. After that it is the menu button, and the button carries a dot
+  // until it has been read.
+  function firstEverVisit() {
+    try {
+      return !localStorage.getItem(TUT_KEY) &&
+             !localStorage.getItem(STATS_KEY) &&
+             !localStorage.getItem(LIFE_KEY);
+    } catch (e) { return false; }
+  }
+
+  function maybeOfferTutorial() {
+    tutBtn.classList.toggle('fresh', !tutSeen());
+    if (!firstEverVisit()) return;
+    // Every automated page starts with an empty profile, so to a test EVERY
+    // run looks like a first visit and the walkthrough covers the UI it was
+    // about to click. ?debug is only ever set by automation, so the offer is
+    // suppressed there -- the path itself stays testable through
+    // __pop.offerTutorial(), which is what actually verifies it.
+    if (DEBUG) return;
+    overlay.classList.add('hidden');
+    openTutorial('first-run');
+  }
+  tutClose.addEventListener('click', closeTutorial);
+  tutPrev.addEventListener('click', function () { tutStep(-1); });
+  tutNext.addEventListener('click', function () { tutStep(1); });
+
   // ---- achievements panel ---------------------------------------------
   //
   // Built from the same table the game tests against, so a row cannot exist
@@ -7670,6 +8060,7 @@
            !modesEl.classList.contains('hidden') ||
            !levelsEl.classList.contains('hidden') ||
            !awardsEl.classList.contains('hidden') ||
+           !tutEl.classList.contains('hidden') ||
            !helpEl.classList.contains('hidden') ||
            !loadoutSheet.classList.contains('hidden') ||
            !buyPanel.classList.contains('hidden') ||
@@ -8065,6 +8456,7 @@
       else if (!modesEl.classList.contains('hidden')) closeModes();
       else if (!levelsEl.classList.contains('hidden')) closeLevels();
       else if (!awardsEl.classList.contains('hidden')) closeAwards();
+      else if (!tutEl.classList.contains('hidden')) closeTutorial();
       else if (mode.id === 'puzzle') openLevels();
       else if (!storeEl.classList.contains('hidden')) closeStore();
       return;
@@ -8090,7 +8482,7 @@
   });
 
   // Exposed only for local testing:  game.html?debug
-  if (/(^|[?&])debug(=|&|$)/.test(location.search)) {
+  if (DEBUG) {
     window.__pop = {
       circles: circles,
       spawn: spawnCircle,
@@ -8188,6 +8580,8 @@
       },
       touching: touching,
       hpColor: hpColor,
+      setPulse: function (v) { chainPulse = v; },
+      pulse: function () { return chainPulse; },
       baseHp: function () { return baseHp; },
       setBaseHp: function (v) { baseHp = v; },
       baseY: function () { return baseY(); },
@@ -8255,6 +8649,28 @@
       setStats: function (o) { for (var k in o) if (k in STATS) STATS[k] = o[k]; saveStats(); },
       checkAchievements: checkAchievements,
       openAwards: openAwards,
+      openTutorial: openTutorial,
+      tutorial: TUTORIAL,
+      tutPage: function () { return tutPage; },
+      tutStep: tutStep,
+      tutSeen: tutSeen,
+      offerTutorial: function () {
+        // The real first-run path, minus the DEBUG guard that exists only so
+        // automation is not blocked by it.
+        tutBtn.classList.toggle('fresh', !tutSeen());
+        if (!firstEverVisit()) return false;
+        overlay.classList.add('hidden');
+        openTutorial('first-run');
+        return true;
+      },
+      // For automation: a cleared profile is a first visit, and a first
+      // visit now opens the walkthrough over everything. A test that wants
+      // a clean profile without the onboarding calls this before reloading.
+      skipTutorial: function () { markTutSeen(); },
+      firstEverVisit: function () { return firstEverVisit(); },
+      resetTutorial: function () {
+        try { localStorage.removeItem('popTutorialSeen'); } catch (e) {}
+      },
       resetAwards: function () {
         achieved = {}; saveAchieved();
         for (var k in STATS) STATS[k] = 0;
@@ -8337,6 +8753,10 @@
   updateAbilities();
 
   resize();
+
+  // Last, deliberately: it paints real circles, so it needs applyTheme() to
+  // have built the palette and resize() to have sized the canvas.
+  maybeOfferTutorial();
 })();
 </script>
 </body>
